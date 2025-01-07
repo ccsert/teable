@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import type { FieldType, CellValueType } from '../constant';
 import { FieldCore } from '../field';
+import { intelligenceOptionsSchema } from '../intelligence-options';
 import { singleLineTextShowAsSchema } from '../show-as';
 
 export const singlelineTextFieldOptionsSchema = z.object({
   showAs: singleLineTextShowAsSchema.optional(),
+  intelligence: intelligenceOptionsSchema.optional(),
   defaultValue: z
     .string()
     .optional()
