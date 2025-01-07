@@ -30,6 +30,7 @@ import {
   lastModifiedByFieldOptionsSchema,
 } from './derivate';
 import { unionFormattingSchema } from './formatting';
+import { intelligenceOptionsSchema } from './intelligence-options';
 import { unionShowAsSchema } from './show-as';
 
 export const lookupOptionsVoSchema = linkFieldOptionsSchema
@@ -98,6 +99,7 @@ export const unionFieldOptionsRoSchema = z.union([
 export const commonOptionsSchema = z.object({
   showAs: unionShowAsSchema.optional(),
   formatting: unionFormattingSchema.optional(),
+  intelligence: intelligenceOptionsSchema.optional(),
 });
 
 export type IFieldOptionsRo = z.infer<typeof unionFieldOptionsRoSchema>;
