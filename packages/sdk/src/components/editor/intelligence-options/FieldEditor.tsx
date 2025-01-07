@@ -1,8 +1,7 @@
-import { Button, Dialog, DialogContent, DialogTrigger, Label } from '@teable/ui-lib';
-import { PlusIcon, XIcon } from 'lucide-react';
-import type { ForwardRefRenderFunction } from 'react';
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useMemo } from 'react';
-import { useFields, useFieldStaticGetter } from '../../../hooks';
+import { Label } from '@teable/ui-lib';
+import { useEffect, useRef, useState } from 'react';
+import { useFields } from '../../../hooks';
+import { FieldSelector } from './components/FieldSelector';
 
 interface IFieldEditorProps {
   value: string;
@@ -13,241 +12,200 @@ interface IFieldEditorProps {
   currentFieldId?: string;
 }
 
-export interface IFieldEditorRef {
-  focus: () => void;
+interface IFieldNode {
+  id: string;
+  name: string;
 }
 
-interface IToken {
-  type: 'field' | 'text';
-  content: string;
-  fieldId?: string;
-  fieldName?: string;
-}
-
-const FieldEditorBase: ForwardRefRenderFunction<IFieldEditorRef, IFieldEditorProps> = (
-  { value, onChange, placeholder, enableFieldSelector = true, label, currentFieldId },
-  ref
-) => {
-  const [tokens, setTokens] = useState<IToken[]>([]);
-  const [currentInput, setCurrentInput] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+export const FieldEditor = ({
+  value,
+  onChange,
+  placeholder,
+  enableFieldSelector = true,
+  label,
+  currentFieldId,
+}: IFieldEditorProps) => {
+  const editorRef = useRef<HTMLDivElement>(null);
   const fields = useFields({ withHidden: true, withDenied: true });
-  const getFieldStatic = useFieldStaticGetter();
+  const [isComposing, setIsComposing] = useState(false);
 
-  useImperativeHandle(ref, () => ({
-    focus: () => inputRef.current?.focus(),
-  }));
+  // 创建字段标记的 HTML
+  const createFieldSpan = (field: IFieldNode) => {
+    return `<span 
+      class="inline-flex h-6 items-center gap-1 rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-700 cursor-default mx-0.5 select-none" 
+      contenteditable="false" 
+      data-field-id="${field.id}"
+      data-field-name="${field.name}"
+    >
+      ${field.name}
+      <button 
+        type="button"
+        class="ml-0.5 rounded-sm hover:bg-blue-100 p-0.5 delete-field" 
+        data-field-id="${field.id}"
+      >
+        <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </span>`;
+  };
 
-  // 解析value字符串为tokens
+  // 将内容转换为 HTML
+  const contentToHtml = (content: string): string => {
+    const fieldRegex = /\{([^}]+)\}/g;
+    let lastIndex = 0;
+    let result = '';
+    let match;
+
+    while ((match = fieldRegex.exec(content)) !== null) {
+      // 添加字段前的普通文本
+      result += content.slice(lastIndex, match.index);
+
+      // 添加字段标记
+      const fieldId = match[1];
+      const field = fields.find((f) => f.id === fieldId);
+      if (field) {
+        result += createFieldSpan(field);
+      }
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // 添加剩余的文本
+    result += content.slice(lastIndex);
+    return result;
+  };
+
+  // 将 HTML 转换回内容字符串
+  const htmlToContent = (element: HTMLElement): string => {
+    let content = '';
+    const nodes = Array.from(element.childNodes);
+
+    nodes.forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        content += node.textContent || '';
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        if (el.hasAttribute('data-field-id')) {
+          content += `{${el.getAttribute('data-field-id')}}`;
+        } else if (el.tagName.toLowerCase() === 'br') {
+          content += '\n';
+        } else {
+          content += el.textContent || '';
+        }
+      }
+    });
+
+    return content;
+  };
+
+  // 初始化和更新内容
   useEffect(() => {
-    const parseValue = (val: string) => {
-      const fieldRegex = /\{([^}]+)\}/g;
-      const tokens: IToken[] = [];
-      let lastIndex = 0;
-      let match;
+    if (!editorRef.current) return;
 
-      while ((match = fieldRegex.exec(val)) !== null) {
-        if (match.index > lastIndex) {
-          tokens.push({
-            type: 'text',
-            content: val.slice(lastIndex, match.index),
-          });
-        }
-
-        const fieldId = match[1];
-        const field = fields.find((f) => f.id === fieldId);
-        if (field) {
-          tokens.push({
-            type: 'field',
-            content: `{${fieldId}}`,
-            fieldId: fieldId,
-            fieldName: field.name,
-          });
-        }
-        lastIndex = match.index + match[0].length;
-      }
-
-      if (lastIndex < val.length) {
-        tokens.push({
-          type: 'text',
-          content: val.slice(lastIndex),
-        });
-      }
-
-      setTokens(tokens);
-    };
-
-    parseValue(value);
+    const html = contentToHtml(value);
+    if (editorRef.current.innerHTML !== html) {
+      editorRef.current.innerHTML = html;
+    }
   }, [value, fields]);
 
-  // 修改 updateValue 函数，移除实时更新
-  const updateValue = (newTokens: IToken[]) => {
-    const newValue = newTokens.map((token) => token.content).join('');
-    onChange(newValue);
+  // 插入字段
+  const insertField = (field: IFieldNode) => {
+    if (!editorRef.current) return;
+
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    if (!editorRef.current.contains(range.commonAncestorContainer)) {
+      // 如果没有选中编辑器内的内容，将字段插入到末尾
+      const newRange = document.createRange();
+      newRange.selectNodeContents(editorRef.current);
+      newRange.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(newRange);
+    }
+
+    const fieldHtml = createFieldSpan(field);
+    const temp = document.createElement('div');
+    temp.innerHTML = fieldHtml;
+    const fieldNode = temp.firstChild;
+
+    if (fieldNode) {
+      range.deleteContents();
+      range.insertNode(fieldNode);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    // 更新内容
+    const newContent = htmlToContent(editorRef.current);
+    onChange(newContent);
   };
 
-  // 修改输入框变化处理函数，不再实时更新值
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCurrentInput(e.target.value);
-  };
+  // 删除字段
+  const deleteField = (fieldId: string) => {
+    if (!editorRef.current) return;
 
-  // 修改按键处理函数
-  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && currentInput.trim()) {
-      const newTokens = [...tokens, { type: 'text', content: currentInput }];
-      setTokens(newTokens);
-      updateValue(newTokens);
-      setCurrentInput('');
-    } else if (e.key === 'Backspace' && !currentInput && tokens.length > 0) {
-      const newTokens = tokens.slice(0, -1);
-      setTokens(newTokens);
-      updateValue(newTokens);
+    const fieldElement = editorRef.current.querySelector(`[data-field-id="${fieldId}"]`);
+    if (fieldElement) {
+      fieldElement.remove();
+      const newContent = htmlToContent(editorRef.current);
+      onChange(newContent);
     }
   };
-
-  // 新增：处理输入框失去焦点
-  const handleInputBlur = () => {
-    if (currentInput.trim()) {
-      const newTokens = [...tokens, { type: 'text', content: currentInput }];
-      setTokens(newTokens);
-      updateValue(newTokens);
-      setCurrentInput('');
-    }
-  };
-
-  // 修改字段选择处理函数
-  const handleFieldSelect = (field: { id: string; name: string }) => {
-    const newTokens = [...tokens];
-    if (currentInput.trim()) {
-      newTokens.push({ type: 'text', content: currentInput });
-    }
-    newTokens.push({
-      type: 'field',
-      content: `{${field.id}}`,
-      fieldId: field.id,
-      fieldName: field.name,
-    });
-    setTokens(newTokens);
-    updateValue(newTokens);
-    setCurrentInput('');
-  };
-
-  // 新增：合并相邻的文本 token
-  const mergeTextTokens = (tokens: IToken[]) => {
-    return tokens.reduce((acc: IToken[], curr) => {
-      if (curr.type === 'text' && acc.length > 0 && acc[acc.length - 1].type === 'text') {
-        acc[acc.length - 1].content += curr.content;
-      } else {
-        acc.push(curr);
-      }
-      return acc;
-    }, []);
-  };
-
-  // 新增：处理文本 token 的编辑
-  const handleTextTokenChange = (index: number, newContent: string) => {
-    const newTokens = [...tokens];
-    if (newContent === '') {
-      newTokens.splice(index, 1);
-    } else {
-      newTokens[index].content = newContent;
-    }
-    const mergedTokens = mergeTextTokens(newTokens);
-    setTokens(mergedTokens);
-    updateValue(mergedTokens);
-  };
-
-  const removeToken = (index: number) => {
-    const newTokens = tokens.filter((_, i) => i !== index);
-    setTokens(newTokens);
-    updateValue(newTokens);
-  };
-
-  // 过滤掉当前字段，避免自循环依赖
-  const availableFields = useMemo(() => {
-    return fields.filter((field) => field.id !== currentFieldId);
-  }, [fields, currentFieldId]);
 
   return (
     <div className="flex w-full flex-col gap-4">
       <div className="flex items-center justify-between">
         {label && <Label className="font-normal">{label}</Label>}
         {enableFieldSelector && (
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2">
-                <PlusIcon className="size-4" />
-                添加字段
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <div className="grid grid-cols-2 gap-2 p-4">
-                {availableFields.map((field) => {
-                  const { Icon } = getFieldStatic(field.type, false);
-                  return (
-                    <button
-                      key={field.id}
-                      className="flex items-center gap-2 rounded-lg border p-3 text-left hover:bg-slate-50"
-                      onClick={() => handleFieldSelect(field)}
-                    >
-                      <Icon className="size-5" />
-                      <span className="text-sm">{field.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </DialogContent>
-          </Dialog>
+          <FieldSelector currentFieldId={currentFieldId} onSelect={insertField} />
         )}
       </div>
-      <div className="flex min-h-[36px] flex-wrap items-center gap-1 rounded-lg border px-2 py-1.5 focus-within:ring-2 focus-within:ring-primary/20">
-        {tokens.map((token, index) =>
-          token.type === 'field' ? (
-            <div
-              key={index}
-              className="inline-flex h-6 items-center gap-1 rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-700"
-            >
-              <span className="max-w-[120px] truncate">{token.fieldName}</span>
-              <button
-                onClick={() => removeToken(index)}
-                className="ml-0.5 rounded-sm hover:bg-blue-100"
-                title="删除字段"
-              >
-                <XIcon className="size-3" />
-              </button>
-            </div>
-          ) : (
-            <div
-              key={index}
-              className="text-sm"
-              role="textbox"
-              tabIndex={0}
-              contentEditable
-              suppressContentEditableWarning
-              onBlur={(e) => handleTextTokenChange(index, e.currentTarget.textContent || '')}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-            >
-              {token.content}
-            </div>
-          )
-        )}
-        <input
-          ref={inputRef}
-          className="min-w-[60px] flex-1 bg-transparent py-0.5 text-sm outline-none"
-          value={currentInput}
-          onChange={handleInputChange}
-          onKeyDown={handleInputKeyDown}
-          onBlur={handleInputBlur}
-          placeholder={tokens.length === 0 ? placeholder : undefined}
-        />
-      </div>
+      <div
+        ref={editorRef}
+        className="min-h-[36px] w-full rounded-lg border px-3 py-2 text-sm empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] focus:outline-none focus:ring-2 focus:ring-primary/20"
+        contentEditable
+        role="textbox"
+        tabIndex={0}
+        aria-multiline="true"
+        aria-label={label || 'Text editor'}
+        data-placeholder={placeholder}
+        onCompositionStart={() => setIsComposing(true)}
+        onCompositionEnd={() => {
+          setIsComposing(false);
+          if (editorRef.current) {
+            onChange(htmlToContent(editorRef.current));
+          }
+        }}
+        onInput={() => {
+          if (!isComposing && editorRef.current) {
+            onChange(htmlToContent(editorRef.current));
+          }
+        }}
+        onClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.classList.contains('delete-field')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const fieldId = target.getAttribute('data-field-id');
+            if (fieldId) {
+              deleteField(fieldId);
+            }
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            document.execCommand('insertLineBreak');
+            if (editorRef.current) {
+              onChange(htmlToContent(editorRef.current));
+            }
+          }
+        }}
+      />
     </div>
   );
 };
-
-export const FieldEditor = forwardRef<IFieldEditorRef, IFieldEditorProps>(FieldEditorBase);

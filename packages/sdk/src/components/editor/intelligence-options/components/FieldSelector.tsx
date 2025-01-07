@@ -1,59 +1,74 @@
-import type { FieldType } from '@teable/core';
 import {
   Button,
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Input,
 } from '@teable/ui-lib';
 import { PlusIcon } from 'lucide-react';
+import { useState, useMemo } from 'react';
 import { useFields, useFieldStaticGetter } from '../../../../hooks';
 
 interface IFieldSelectorProps {
-  onSelect: (field: { id: string; name: string; type: FieldType }) => void;
   currentFieldId?: string;
-  triggerClassName?: string;
+  onSelect: (field: { id: string; name: string }) => void;
 }
 
-export const FieldSelector: React.FC<IFieldSelectorProps> = ({
-  onSelect,
-  currentFieldId,
-  triggerClassName,
-}) => {
+export const FieldSelector = ({ currentFieldId, onSelect }: IFieldSelectorProps) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const fields = useFields({ withHidden: true, withDenied: true });
   const getFieldStatic = useFieldStaticGetter();
 
-  const availableFields = fields.filter((field) => field.id !== currentFieldId);
+  const availableFields = useMemo(() => {
+    const filtered = fields.filter((field) => field.id !== currentFieldId);
+    if (!search) return filtered;
+
+    return filtered.filter((field) => field.name.toLowerCase().includes(search.toLowerCase()));
+  }, [fields, currentFieldId, search]);
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className={triggerClassName}>
-          <PlusIcon className="mr-1 size-4" />
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-2">
+          <PlusIcon className="size-4" />
           添加字段
         </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[240px] p-0" align="end">
-        <Command>
-          <CommandInput placeholder="搜索字段..." className="h-9" />
-          <CommandEmpty>未找到相关字段</CommandEmpty>
-          <CommandGroup className="max-h-[200px] overflow-auto">
-            {availableFields.map((field) => {
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-[300px]">
+        <div className="p-2">
+          <Input
+            placeholder="搜索字段..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8"
+          />
+        </div>
+        <div className="max-h-[300px] overflow-auto">
+          {availableFields.length === 0 ? (
+            <div className="p-2 text-sm text-muted-foreground">未找到相关字段</div>
+          ) : (
+            availableFields.map((field) => {
               const { Icon } = getFieldStatic(field.type, false);
               return (
-                <CommandItem key={field.id} value={field.name} onSelect={() => onSelect(field)}>
-                  <Icon className="mr-2 size-4 shrink-0" />
-                  <span className="truncate">{field.name}</span>
-                </CommandItem>
+                <DropdownMenuItem
+                  key={field.id}
+                  className="flex items-center gap-2 p-2"
+                  onSelect={() => {
+                    onSelect(field);
+                    setOpen(false);
+                    setSearch('');
+                  }}
+                >
+                  <Icon className="size-4" />
+                  <span className="flex-1 truncate">{field.name}</span>
+                </DropdownMenuItem>
               );
-            })}
-          </CommandGroup>
-        </Command>
-      </PopoverContent>
-    </Popover>
+            })
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
