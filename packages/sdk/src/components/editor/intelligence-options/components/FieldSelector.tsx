@@ -31,37 +31,39 @@ export const FieldSelector = ({ currentFieldId, onSelect }: IFieldSelectorProps)
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <PlusIcon className="size-4" />
-          添加字段
+        <Button variant="ghost" size="xs" className="h-7 gap-1 px-2">
+          <PlusIcon className="size-3.5" />
+          <span className="text-xs">字段</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[300px]">
-        <div className="p-2">
+      <DropdownMenuContent align="end" className="w-56 p-0">
+        <div className="border-b p-2">
           <Input
             placeholder="搜索字段..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-8"
+            className="h-7 text-xs"
           />
         </div>
-        <div className="max-h-[300px] overflow-auto">
+        <div className="max-h-48 overflow-auto py-1">
           {availableFields.length === 0 ? (
-            <div className="p-2 text-sm text-muted-foreground">未找到相关字段</div>
+            <div className="px-2 py-1.5 text-center text-xs text-muted-foreground">
+              未找到相关字段
+            </div>
           ) : (
             availableFields.map((field) => {
               const { Icon } = getFieldStatic(field.type, false);
               return (
                 <DropdownMenuItem
                   key={field.id}
-                  className="flex items-center gap-2 p-2"
+                  className="flex items-center gap-2 px-2 py-1.5 text-xs"
                   onSelect={() => {
                     onSelect(field);
                     setOpen(false);
                     setSearch('');
                   }}
                 >
-                  <Icon className="size-4" />
+                  <Icon className="size-3.5 shrink-0" />
                   <span className="flex-1 truncate">{field.name}</span>
                 </DropdownMenuItem>
               );
