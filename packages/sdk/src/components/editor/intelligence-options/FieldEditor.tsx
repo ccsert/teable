@@ -1,4 +1,5 @@
 import { Label } from '@teable/ui-lib';
+import { debounce } from 'lodash';
 import { useEffect, useRef, useState } from 'react';
 import { useFields } from '../../../hooks';
 import { FieldSelector } from './components/FieldSelector';
@@ -99,15 +100,82 @@ export const FieldEditor = ({
     return content;
   };
 
+  // 恢复光标位置
+  const restoreCursorPosition = (
+    editor: HTMLElement,
+    startContainer: Node | undefined | null,
+    startOffset: number,
+    selection: Selection
+  ) => {
+    if (!startContainer) return;
+
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null);
+    let node = walker.nextNode();
+    while (node) {
+      if (node.textContent === startContainer.textContent) {
+        const newRange = document.createRange();
+        newRange.setStart(node, startOffset);
+        newRange.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(newRange);
+        break;
+      }
+      node = walker.nextNode();
+    }
+  };
+
   // 初始化和更新内容
   useEffect(() => {
     if (!editorRef.current) return;
 
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const isEditorFocused = editorRef.current.contains(range?.commonAncestorContainer || null);
+
     const html = contentToHtml(value);
     if (editorRef.current.innerHTML !== html) {
+      const startContainer = range?.startContainer;
+      const startOffset = range?.startOffset;
+
       editorRef.current.innerHTML = html;
+
+      if (
+        isEditorFocused &&
+        startContainer &&
+        startOffset !== undefined &&
+        selection &&
+        startContainer !== null
+      ) {
+        try {
+          restoreCursorPosition(editorRef.current, startContainer, startOffset, selection);
+        } catch (e) {
+          console.debug('Failed to restore cursor position:', e);
+        }
+      }
     }
   }, [value, fields]);
+
+  // 更新值
+  const updateValue = () => {
+    if (!editorRef.current || isComposing) return;
+    const newContent = htmlToContent(editorRef.current);
+    if (newContent !== value) {
+      onChange(newContent);
+    }
+  };
+
+  // 使用防抖处理输入更新
+  const debouncedUpdate = useRef(
+    debounce(() => {
+      updateValue();
+    }, 100)
+  ).current;
+
+  useEffect(() => {
+    return () => {
+      debouncedUpdate.cancel();
+    };
+  }, [debouncedUpdate]);
 
   // 插入字段
   const insertField = (field: IFieldNode) => {
@@ -181,8 +249,8 @@ export const FieldEditor = ({
           }
         }}
         onInput={() => {
-          if (!isComposing && editorRef.current) {
-            onChange(htmlToContent(editorRef.current));
+          if (!isComposing) {
+            debouncedUpdate();
           }
         }}
         onClick={(e) => {
