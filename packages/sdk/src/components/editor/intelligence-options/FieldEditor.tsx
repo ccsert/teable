@@ -6,12 +6,11 @@ import { FieldSelector } from './components/FieldSelector';
 
 interface IFieldEditorProps {
   value: string;
-  onChange: (value: string) => void;
+  onUpdate: (value: string, usedFieldIds: string[]) => void;
   placeholder?: string;
   enableFieldSelector?: boolean;
   label?: string;
   currentFieldId?: string;
-  onFieldsChange?: (fieldIds: string[]) => void;
 }
 
 interface IFieldNode {
@@ -56,12 +55,11 @@ const restoreCursorPosition = (editor: HTMLElement, position: ICursorPosition | 
 
 export const FieldEditor = ({
   value,
-  onChange,
+  onUpdate,
   placeholder,
   enableFieldSelector = true,
   label,
   currentFieldId,
-  onFieldsChange,
 }: IFieldEditorProps) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const fields = useFields({ withHidden: true, withDenied: true });
@@ -199,18 +197,16 @@ export const FieldEditor = ({
 
       const newContent = htmlToContent(editorRef.current);
       if (newContent !== value) {
-        onChange(newContent);
-
         // 提取所有使用的字段 ID
         const usedFieldIds = Array.from(newContent.matchAll(/\{([^}]+)\}/g))
           .map((match) => match[1])
           .filter((id, index, self) => self.indexOf(id) === index); // 去重
 
-        // 通知父组件字段变化
-        onFieldsChange?.(usedFieldIds);
+        // 使用单个回调函数同时更新内容和字段列表
+        onUpdate(newContent, usedFieldIds);
       }
     },
-    [isComposing, onChange, value, onFieldsChange]
+    [isComposing, onUpdate, value]
   );
 
   // 使用 useCallback 优化事件处理函数
@@ -350,13 +346,13 @@ export const FieldEditor = ({
           // 触发内容更新
           requestAnimationFrame(() => {
             if (editorRef.current) {
-              onChange(htmlToContent(editorRef.current));
+              onUpdate(htmlToContent(editorRef.current), []);
             }
           });
         }
       }
     },
-    [onChange]
+    [onUpdate]
   );
 
   useEffect(() => {
