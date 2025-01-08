@@ -11,6 +11,7 @@ interface IFieldEditorProps {
   enableFieldSelector?: boolean;
   label?: string;
   currentFieldId?: string;
+  onFieldsChange?: (fieldIds: string[]) => void;
 }
 
 interface IFieldNode {
@@ -60,12 +61,12 @@ export const FieldEditor = ({
   enableFieldSelector = true,
   label,
   currentFieldId,
+  onFieldsChange,
 }: IFieldEditorProps) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const fields = useFields({ withHidden: true, withDenied: true });
   const [isComposing, setIsComposing] = useState(false);
   const updateTimeoutRef = useRef<NodeJS.Timeout>();
-
   // 添加新的工具函数来安全地处理HTML内容
   const sanitizeHtml = (html: string) => {
     const div = document.createElement('div');
@@ -105,16 +106,27 @@ export const FieldEditor = ({
   // 将 contentToHtml 改为 useCallback
   const contentToHtml = useCallback(
     (content: string): string => {
-      if (!content || !Array.isArray(fields) || fields.length === 0) return '';
+      if (!content) return '';
 
       // 先处理换行符
       const htmlWithLineBreaks = content.replace(/\n/g, '<br>');
 
       // 再处理字段标记
-      const fieldMap = new Map(fields.map((f) => [f.id, f]));
-      return htmlWithLineBreaks.replace(/\{([^}]+)\}/g, (_, fieldId) => {
+      const fieldMap = new Map(fields?.map((f) => [f.id, f]) || []);
+      return htmlWithLineBreaks.replace(/\{([^}]+)\}/g, (match, fieldId) => {
         const field = fieldMap.get(fieldId);
-        return field ? createFieldSpan(field) : '';
+        if (field) {
+          return createFieldSpan(field);
+        }
+        // 如果找不到对应的字段，将其显示为普通文本标记
+        const span = document.createElement('span');
+        span.className =
+          'inline-flex h-6 items-center gap-1 rounded bg-gray-100 px-1.5 text-xs font-medium text-gray-700 cursor-default mx-0.5 select-none';
+        span.contentEditable = 'false';
+        span.textContent = match;
+        const temp = document.createElement('div');
+        temp.appendChild(span);
+        return temp.innerHTML;
       });
     },
     [fields]
@@ -188,9 +200,17 @@ export const FieldEditor = ({
       const newContent = htmlToContent(editorRef.current);
       if (newContent !== value) {
         onChange(newContent);
+
+        // 提取所有使用的字段 ID
+        const usedFieldIds = Array.from(newContent.matchAll(/\{([^}]+)\}/g))
+          .map((match) => match[1])
+          .filter((id, index, self) => self.indexOf(id) === index); // 去重
+
+        // 通知父组件字段变化
+        onFieldsChange?.(usedFieldIds);
       }
     },
-    [isComposing, onChange, value]
+    [isComposing, onChange, value, onFieldsChange]
   );
 
   // 使用 useCallback 优化事件处理函数
