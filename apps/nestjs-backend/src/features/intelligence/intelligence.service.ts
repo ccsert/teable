@@ -145,47 +145,81 @@ export class IntelligenceService {
     }
   ) {
     const { fieldMap, dynamicDepends, prompt, fieldId, fieldName } = config;
-    for (const record of records) {
-      await this.recordOpenApiService.updateRecord(tableId, record.__id as string, {
-        record: {
-          fields: {
-            [fieldName]: '思考中...',
-          },
-        },
+
+    // 将记录分成更小的批次处理
+    const smallBatchSize = 3;
+    const batches = [];
+    for (let i = 0; i < records.length; i += smallBatchSize) {
+      batches.push(records.slice(i, i + smallBatchSize));
+    }
+
+    for (const batch of batches) {
+      // 批量更新为"思考中..."状态
+      await Promise.all(
+        batch.map((record) =>
+          this.recordOpenApiService.updateRecord(tableId, record.__id as string, {
+            record: {
+              fields: {
+                [fieldName]: '思考中...',
+              },
+            },
+          })
+        )
+      );
+
+      // 处理记录
+      const processPromises = batch.map(async (record) => {
+        try {
+          const processedPrompt = this.replacePlaceholders(record, {
+            fieldMap,
+            dynamicDepends,
+            prompt,
+          });
+
+          const config = await this.aiService.getAIConfig();
+          const currentTaskModel = TASK_MODEL_MAP.coding;
+          const modelKey = config[currentTaskModel as keyof typeof config] as string;
+          const modelInstance = await this.aiService.getModelInstance(
+            modelKey,
+            config.llmProviders
+          );
+
+          const result = await generateText({
+            model: modelInstance,
+            prompt: processedPrompt,
+          });
+
+          return {
+            recordId: record.__id as string,
+            success: true,
+            result: result.text,
+          };
+        } catch (error) {
+          this.logger.error(`Error processing record for field ${fieldId}`, error);
+          return {
+            recordId: record.__id as string,
+            success: false,
+          };
+        }
       });
-      try {
-        const processedPrompt = this.replacePlaceholders(record, {
-          fieldMap,
-          dynamicDepends,
-          prompt,
-        });
-        const config = await this.aiService.getAIConfig();
-        const currentTaskModel = TASK_MODEL_MAP.coding;
-        const modelKey = config[currentTaskModel as keyof typeof config] as string;
-        const modelInstance = await this.aiService.getModelInstance(modelKey, config.llmProviders);
-        const result = await generateText({
-          model: modelInstance,
-          prompt: processedPrompt,
-        });
-        record[fieldId] = result.text;
-        await this.recordOpenApiService.updateRecord(tableId, record.__id as string, {
-          record: {
-            fields: {
-              [fieldName]: result.text,
+
+      const results = await Promise.all(processPromises);
+
+      // 批量更新处理结果
+      await Promise.all(
+        results.map(({ recordId, success, result }) =>
+          this.recordOpenApiService.updateRecord(tableId, recordId, {
+            record: {
+              fields: {
+                [fieldName]: success ? result : '思考失败',
+              },
             },
-          },
-        });
-      } catch (error) {
-        this.logger.error(`Error processing record for field ${fieldId}`, error);
-        await this.recordOpenApiService.updateRecord(tableId, record.__id as string, {
-          record: {
-            fields: {
-              [fieldName]: '思考失败',
-            },
-          },
-        });
-        continue;
-      }
+          })
+        )
+      );
+
+      // 添加小延迟，避免数据库压力过大
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
 
@@ -276,14 +310,26 @@ export class IntelligenceService {
 
   private async processRecords(tableId: string, recordIds: string[], context: IProcessContext) {
     const { fieldMap, fields, sortedFields, fieldChanges } = context;
+    const batchSize = 3; // 减小批次大小
 
-    for (const recordId of recordIds) {
-      const recordData = this.buildRecordData(recordId, fieldMap, fieldChanges);
-      await this.processRecordFields(tableId, recordId, recordData, {
-        fieldMap,
-        fields,
-        sortedFields,
-      });
+    // 将记录分批处理
+    for (let i = 0; i < recordIds.length; i += batchSize) {
+      const batch = recordIds.slice(i, i + batchSize);
+      const recordDataBatch = batch.map((recordId) =>
+        this.buildRecordData(recordId, fieldMap, fieldChanges)
+      );
+
+      // 串行处理每个批次中的记录
+      for (let j = 0; j < recordDataBatch.length; j++) {
+        await this.processRecordFields(tableId, batch[j], recordDataBatch[j], {
+          fieldMap,
+          fields,
+          sortedFields,
+        });
+      }
+
+      // 添加小延迟，避免数据库压力过大
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
 
@@ -314,6 +360,8 @@ export class IntelligenceService {
   ) {
     const { fieldMap, fields, sortedFields } = context;
 
+    // 按照拓扑排序的顺序串行处理字段
+    // 因为字段之间可能存在依赖关系，所以这里不能并行
     for (const field of sortedFields) {
       await this.processField(tableId, recordId, recordData, field, { fieldMap, fields });
     }
@@ -334,8 +382,6 @@ export class IntelligenceService {
     if (!this.validateFieldProcessing(fieldName, intelligence)) return;
 
     try {
-      await this.updateFieldStatus(tableId, recordId, fieldName!, '思考中...');
-
       if (this.hasMissingDependencies(intelligence!, fieldMap, recordData)) {
         this.logger.warn(`Missing dependencies for record ${recordId}, field ${fieldId}`);
         return;
