@@ -1,0 +1,542 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { type IIntelligenceOptions } from '@teable/core';
+import { PrismaService } from '@teable/db-main-prisma';
+import { generateText } from 'ai';
+import { Knex } from 'knex';
+import { InjectModel } from 'nest-knexjs';
+import { IThresholdConfig, ThresholdConfig } from '../../configs/threshold.config';
+import { AiService } from '../ai/ai.service';
+import { TASK_MODEL_MAP } from '../ai/constant';
+import type { ICellContext } from '../calculation/utils/changes';
+import { systemDbFieldNames } from '../field/constant';
+import { FieldService } from '../field/field.service';
+import { RecordOpenApiService } from '../record/open-api/record-open-api.service';
+import type { IUpdateRecordsPayload } from '../undo-redo/operations/update-records.operation';
+
+// 添加类型定义
+type IField = {
+  id: string;
+  name: string;
+  dbFieldName: string;
+  options: { intelligence?: IIntelligenceOptions };
+};
+
+type IIntelligenceField = {
+  fieldId: string;
+  options: { intelligence?: IIntelligenceOptions };
+};
+
+type IFieldChangesMap = Map<string, Map<string, { newValue: unknown; oldValue: unknown }>>;
+
+type IProcessContext = {
+  fieldMap: Record<string, string>;
+  fields: IField[];
+  sortedFields: IIntelligenceField[];
+  fieldChanges: IFieldChangesMap;
+};
+
+type IFieldProcessContext = {
+  fieldMap: Record<string, string>;
+  fields: IField[];
+};
+
+@Injectable()
+export class IntelligenceService {
+  private readonly logger = new Logger(IntelligenceService.name);
+  constructor(
+    private readonly aiService: AiService,
+    private readonly fieldService: FieldService,
+    private readonly prismaService: PrismaService,
+    @InjectModel('CUSTOM_KNEX') private readonly knex: Knex,
+    @ThresholdConfig() private readonly thresholdConfig: IThresholdConfig,
+    private readonly recordOpenApiService: RecordOpenApiService
+  ) {}
+
+  async triggerIntelligenceCreate(
+    tableId: string,
+    fieldId: string,
+    intelligenceOptions: IIntelligenceOptions
+  ) {
+    if (!this.validateIntelligenceOptions(intelligenceOptions)) {
+      return;
+    }
+
+    const { prompt, dynamicDepends } = intelligenceOptions;
+    const fields = await this.fieldService.getFieldsByQuery(tableId);
+    const fieldMap = this.createFieldMap(fields);
+    const { baseId, dbTableName } = await this.getTableMetadata(tableId);
+    const dependsFieldNames = this.getDependsFieldNames(fields, [...dynamicDepends!, fieldId]);
+    // 获取fieldId的名称
+    const fieldName = fields.find((field) => field.id === fieldId)?.name;
+    await this.processRecordsInChunks(dbTableName, dependsFieldNames, async (records) => {
+      await this.processRecordBatch(tableId, records, {
+        fieldMap,
+        dynamicDepends: dynamicDepends!,
+        prompt: prompt!,
+        baseId,
+        fieldId,
+        fieldName: fieldName!,
+      });
+    });
+  }
+
+  private validateIntelligenceOptions(options: IIntelligenceOptions): boolean {
+    return (
+      !!options.enabled &&
+      Array.isArray(options.dynamicDepends) &&
+      options.dynamicDepends.length > 0 &&
+      !!options.prompt
+    );
+  }
+
+  private createFieldMap(fields: { id: string; dbFieldName: string }[]): Record<string, string> {
+    return fields.reduce(
+      (acc, field) => {
+        acc[field.id] = field.dbFieldName;
+        return acc;
+      },
+      {} as Record<string, string>
+    );
+  }
+
+  private async getTableMetadata(tableId: string) {
+    return await this.prismaService.tableMeta.findUniqueOrThrow({
+      where: { id: tableId },
+      select: {
+        baseId: true,
+        dbTableName: true,
+      },
+    });
+  }
+
+  private getDependsFieldNames(
+    fields: { id: string; dbFieldName: string }[],
+    dynamicDepends: string[]
+  ): string[] {
+    const dependsFields = fields.filter((field) => dynamicDepends.includes(field.id));
+    return dependsFields.map((field) => field.dbFieldName);
+  }
+
+  private async processRecordsInChunks(
+    dbTableName: string,
+    dependsFieldNames: string[],
+    processor: (records: Record<string, unknown>[]) => Promise<void>
+  ) {
+    const rowCount = await this.getRowCount(dbTableName);
+    const chunkSize = this.thresholdConfig.calcChunkSize;
+    const totalPages = Math.ceil(rowCount / chunkSize);
+
+    for (let page = 0; page < totalPages; page++) {
+      const records = await this.getRecordsByPage(dbTableName, dependsFieldNames, page, chunkSize);
+      await processor(records);
+    }
+  }
+
+  private async processRecordBatch(
+    tableId: string,
+    records: Record<string, unknown>[],
+    config: {
+      fieldMap: Record<string, string>;
+      dynamicDepends: string[];
+      prompt: string;
+      baseId: string;
+      fieldId: string;
+      fieldName: string;
+    }
+  ) {
+    const { fieldMap, dynamicDepends, prompt, fieldId, fieldName } = config;
+    for (const record of records) {
+      await this.recordOpenApiService.updateRecord(tableId, record.__id as string, {
+        record: {
+          fields: {
+            [fieldName]: '思考中...',
+          },
+        },
+      });
+      try {
+        const processedPrompt = this.replacePlaceholders(record, {
+          fieldMap,
+          dynamicDepends,
+          prompt,
+        });
+        const config = await this.aiService.getAIConfig();
+        const currentTaskModel = TASK_MODEL_MAP.coding;
+        const modelKey = config[currentTaskModel as keyof typeof config] as string;
+        const modelInstance = await this.aiService.getModelInstance(modelKey, config.llmProviders);
+        const result = await generateText({
+          model: modelInstance,
+          prompt: processedPrompt,
+        });
+        record[fieldId] = result.text;
+        await this.recordOpenApiService.updateRecord(tableId, record.__id as string, {
+          record: {
+            fields: {
+              [fieldName]: result.text,
+            },
+          },
+        });
+      } catch (error) {
+        this.logger.error(`Error processing record for field ${fieldId}`, error);
+        await this.recordOpenApiService.updateRecord(tableId, record.__id as string, {
+          record: {
+            fields: {
+              [fieldName]: '思考失败',
+            },
+          },
+        });
+        continue;
+      }
+    }
+  }
+
+  private replacePlaceholders(
+    record: Record<string, unknown>,
+    config: {
+      fieldMap: Record<string, string>;
+      dynamicDepends: string[];
+      prompt: string;
+    }
+  ): string {
+    const { fieldMap, dynamicDepends, prompt } = config;
+    return dynamicDepends.reduce((processedPrompt, fieldId) => {
+      const placeholder = `{${fieldId}}`;
+      const dbFieldName = fieldMap[fieldId];
+      const fieldValue = record[dbFieldName];
+      return processedPrompt.replace(placeholder, String(fieldValue ?? ''));
+    }, prompt);
+  }
+  async getRowCount(dbTableName: string) {
+    const query = this.knex.count('*', { as: 'count' }).from(dbTableName).toQuery();
+    const [{ count }] = await this.prismaService.$queryRawUnsafe<{ count: bigint }[]>(query);
+    return Number(count);
+  }
+  private async getRecordsByPage(
+    dbTableName: string,
+    dbFieldNames: string[],
+    page: number,
+    chunkSize: number
+  ) {
+    const query = this.knex(dbTableName)
+      .select([...dbFieldNames, ...systemDbFieldNames])
+      .where((builder) => {
+        dbFieldNames.forEach((fieldNames, index) => {
+          if (index === 0) {
+            builder.whereNotNull(fieldNames);
+          } else {
+            builder.orWhereNotNull(fieldNames);
+          }
+        });
+      })
+      .orderBy('__auto_number')
+      .limit(chunkSize)
+      .offset(page * chunkSize)
+      .toQuery();
+    return this.prismaService
+      .txClient()
+      .$queryRawUnsafe<{ [dbFieldName: string]: unknown }[]>(query);
+  }
+
+  async triggerIntelligenceUpdate(payload: IUpdateRecordsPayload) {
+    const { tableId, cellContexts } = payload;
+
+    // 按字段分组整理变更数据，优化数据结构
+    const fieldChanges = this.groupCellChangesByField(cellContexts);
+    if (fieldChanges.size === 0) return;
+
+    // 获取启用了智能功能的字段
+    const intelligenceFields = await this.getIntelligenceFields(tableId);
+    if (intelligenceFields.length === 0) return;
+
+    // 找出受影响的智能字段并排序
+    const affectedFields = this.getAffectedIntelligenceFields(intelligenceFields, fieldChanges);
+    if (affectedFields.length === 0) return;
+    const sortedFields = this.topologicalSort(affectedFields);
+
+    // 获取处理所需的基础数据
+    const fields = await this.fieldService.getFieldsByQuery(tableId);
+    const fieldMap = this.createFieldMap(fields);
+    const recordsToProcess = this.getRecordsToProcess(fieldChanges);
+
+    // 处理每条记录
+    await this.processRecords(tableId, recordsToProcess, {
+      fieldMap,
+      fields: fields as IField[],
+      sortedFields,
+      fieldChanges,
+    });
+  }
+
+  private getRecordsToProcess(fieldChanges: IFieldChangesMap) {
+    const recordIds = new Set<string>();
+    fieldChanges.forEach((recordMap) => {
+      recordMap.forEach((_, recordId) => recordIds.add(recordId));
+    });
+    return Array.from(recordIds);
+  }
+
+  private async processRecords(tableId: string, recordIds: string[], context: IProcessContext) {
+    const { fieldMap, fields, sortedFields, fieldChanges } = context;
+
+    for (const recordId of recordIds) {
+      const recordData = this.buildRecordData(recordId, fieldMap, fieldChanges);
+      await this.processRecordFields(tableId, recordId, recordData, {
+        fieldMap,
+        fields,
+        sortedFields,
+      });
+    }
+  }
+
+  private buildRecordData(
+    recordId: string,
+    fieldMap: Record<string, string>,
+    fieldChanges: IFieldChangesMap
+  ): Record<string, unknown> {
+    const recordData: Record<string, unknown> = {};
+    fieldChanges.forEach((recordMap, fieldId) => {
+      const dbFieldName = fieldMap[fieldId];
+      if (dbFieldName && recordMap.has(recordId)) {
+        recordData[dbFieldName] = recordMap.get(recordId)?.newValue;
+      }
+    });
+    return recordData;
+  }
+
+  private async processRecordFields(
+    tableId: string,
+    recordId: string,
+    recordData: Record<string, unknown>,
+    context: {
+      fieldMap: Record<string, string>;
+      fields: IField[];
+      sortedFields: IIntelligenceField[];
+    }
+  ) {
+    const { fieldMap, fields, sortedFields } = context;
+
+    for (const field of sortedFields) {
+      await this.processField(tableId, recordId, recordData, field, { fieldMap, fields });
+    }
+  }
+
+  private async processField(
+    tableId: string,
+    recordId: string,
+    recordData: Record<string, unknown>,
+    field: IIntelligenceField,
+    context: IFieldProcessContext
+  ) {
+    const { fieldMap, fields } = context;
+    const { fieldId, options } = field;
+    const { intelligence } = options;
+    const fieldName = fields.find((f) => f.id === fieldId)?.name;
+
+    if (!this.validateFieldProcessing(fieldName, intelligence)) return;
+
+    try {
+      await this.updateFieldStatus(tableId, recordId, fieldName!, '思考中...');
+
+      if (this.hasMissingDependencies(intelligence!, fieldMap, recordData)) {
+        this.logger.warn(`Missing dependencies for record ${recordId}, field ${fieldId}`);
+        return;
+      }
+
+      const result = await this.generateFieldValue(recordData, {
+        fieldMap,
+        intelligence: intelligence!,
+      });
+
+      await this.updateFieldValue(
+        tableId,
+        recordId,
+        fieldName!,
+        result,
+        recordData,
+        fieldMap,
+        fieldId
+      );
+    } catch (error) {
+      this.logger.error(`Error processing record ${recordId} for field ${fieldId}`, error);
+      await this.updateFieldStatus(tableId, recordId, fieldName!, '思考失败');
+    }
+  }
+
+  private validateFieldProcessing(
+    fieldName?: string,
+    intelligence?: IIntelligenceOptions
+  ): boolean {
+    return !!(fieldName && intelligence?.prompt && intelligence.dynamicDepends);
+  }
+
+  private hasMissingDependencies(
+    intelligence: IIntelligenceOptions,
+    fieldMap: Record<string, string>,
+    recordData: Record<string, unknown>
+  ): boolean {
+    return (
+      intelligence?.dynamicDepends?.some((dependFieldId) => {
+        const dbFieldName = fieldMap[dependFieldId];
+        return !(dbFieldName in recordData);
+      }) ?? false
+    );
+  }
+
+  private async generateFieldValue(
+    recordData: Record<string, unknown>,
+    context: {
+      fieldMap: Record<string, string>;
+      intelligence: IIntelligenceOptions;
+    }
+  ): Promise<string> {
+    const { fieldMap, intelligence } = context;
+    const processedPrompt = this.replacePlaceholders(recordData, {
+      fieldMap,
+      dynamicDepends: intelligence.dynamicDepends!,
+      prompt: intelligence.prompt!,
+    });
+
+    const config = await this.aiService.getAIConfig();
+    const currentTaskModel = TASK_MODEL_MAP.coding;
+    const modelKey = config[currentTaskModel as keyof typeof config] as string;
+    const modelInstance = await this.aiService.getModelInstance(modelKey, config.llmProviders);
+
+    const result = await generateText({
+      model: modelInstance,
+      prompt: processedPrompt,
+    });
+
+    return result.text;
+  }
+
+  private async updateFieldValue(
+    tableId: string,
+    recordId: string,
+    fieldName: string,
+    value: string,
+    recordData: Record<string, unknown>,
+    fieldMap: Record<string, string>,
+    fieldId: string
+  ) {
+    const dbFieldName = fieldMap[fieldId];
+    if (dbFieldName) {
+      recordData[dbFieldName] = value;
+    }
+
+    await this.updateFieldStatus(tableId, recordId, fieldName, value);
+  }
+
+  private async updateFieldStatus(
+    tableId: string,
+    recordId: string,
+    fieldName: string,
+    value: string
+  ) {
+    await this.recordOpenApiService.updateRecord(tableId, recordId, {
+      record: {
+        fields: {
+          [fieldName]: value,
+        },
+      },
+    });
+  }
+
+  private groupCellChangesByField(cellContexts: ICellContext[]) {
+    const fieldChanges = new Map<string, Map<string, { newValue: unknown; oldValue: unknown }>>();
+
+    for (const { fieldId, recordId, newValue, oldValue } of cellContexts) {
+      if (newValue === oldValue) continue;
+
+      if (!fieldChanges.has(fieldId)) {
+        fieldChanges.set(fieldId, new Map());
+      }
+
+      fieldChanges.get(fieldId)!.set(recordId, { newValue, oldValue });
+    }
+
+    return fieldChanges;
+  }
+
+  private async getIntelligenceFields(tableId: string): Promise<IIntelligenceField[]> {
+    const fields = await this.fieldService.getFieldsByQuery(tableId);
+
+    return fields
+      .filter((field) => {
+        const options = field.options as { intelligence?: IIntelligenceOptions };
+        return options?.intelligence?.enabled;
+      })
+      .map((field) => ({
+        fieldId: field.id,
+        options: field.options as { intelligence?: IIntelligenceOptions },
+      }));
+  }
+
+  private getAffectedIntelligenceFields(
+    intelligenceFields: IIntelligenceField[],
+    fieldChanges: IFieldChangesMap
+  ): IIntelligenceField[] {
+    return intelligenceFields.filter((field) => {
+      const { intelligence } = field.options;
+      return intelligence?.dynamicDepends?.some((dependsFieldId) =>
+        fieldChanges.has(dependsFieldId)
+      );
+    });
+  }
+
+  topologicalSort(
+    affectedIntelligenceFields: {
+      fieldId: string;
+      options: { intelligence?: IIntelligenceOptions };
+    }[]
+  ) {
+    // 构建邻接表
+    const graph = new Map<string, string[]>();
+    const inDegree = new Map<string, number>();
+
+    // 初始化
+    affectedIntelligenceFields.forEach(({ fieldId }) => {
+      graph.set(fieldId, []);
+      inDegree.set(fieldId, 0);
+    });
+
+    // 构建依赖关系
+    affectedIntelligenceFields.forEach(({ fieldId, options }) => {
+      const dependsOn = options.intelligence?.dynamicDepends || [];
+      dependsOn.forEach((dependFieldId) => {
+        // 只处理在受影响字段中的依赖
+        if (graph.has(dependFieldId)) {
+          graph.get(dependFieldId)?.push(fieldId);
+          inDegree.set(fieldId, (inDegree.get(fieldId) || 0) + 1);
+        }
+      });
+    });
+
+    // 拓扑排序
+    const queue: string[] = [];
+    const result: typeof affectedIntelligenceFields = [];
+
+    // 找出入度为0的节点
+    inDegree.forEach((degree, fieldId) => {
+      if (degree === 0) {
+        queue.push(fieldId);
+      }
+    });
+
+    while (queue.length) {
+      const fieldId = queue.shift()!;
+      const field = affectedIntelligenceFields.find((f) => f.fieldId === fieldId);
+      if (field) {
+        result.push(field);
+      }
+
+      // 更新相邻节点的入度
+      graph.get(fieldId)?.forEach((neighbor) => {
+        inDegree.set(neighbor, (inDegree.get(neighbor) || 0) - 1);
+        if (inDegree.get(neighbor) === 0) {
+          queue.push(neighbor);
+        }
+      });
+    }
+
+    return result;
+  }
+}

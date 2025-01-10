@@ -3,6 +3,7 @@ import type { DynamicModule } from '@nestjs/common';
 import { ConfigurableModuleBuilder, Module } from '@nestjs/common';
 import { EventEmitterModule as BaseEventEmitterModule } from '@nestjs/event-emitter';
 import { AttachmentsTableModule } from '../features/attachments/attachments-table.module';
+import { IntelligenceModule } from '../features/intelligence/Intelligence.module';
 import { NotificationModule } from '../features/notification/notification.module';
 import { ShareDbModule } from '../share-db/share-db.module';
 import { EventEmitterService } from './event-emitter.service';
@@ -10,6 +11,7 @@ import { ActionTriggerListener } from './listeners/action-trigger.listener';
 import { AttachmentListener } from './listeners/attachment.listener';
 import { BasePermissionUpdateListener } from './listeners/base-permission-update.listener';
 import { CollaboratorNotificationListener } from './listeners/collaborator-notification.listener';
+import { IntelligenceTriggerListener } from './listeners/Intelligence-trigger.listener';
 import { PinListener } from './listeners/pin.listener';
 import { RecordHistoryListener } from './listeners/record-history.listener';
 import { TrashListener } from './listeners/trash.listener';
@@ -32,12 +34,19 @@ export class EventEmitterModule extends EventEmitterModuleClass {
     });
 
     return {
-      imports: [module, ShareDbModule, NotificationModule, AttachmentsTableModule],
+      imports: [
+        module,
+        ShareDbModule,
+        NotificationModule,
+        AttachmentsTableModule,
+        IntelligenceModule,
+      ],
       module: EventEmitterModule,
       global,
       providers: [
         EventEmitterService,
         ActionTriggerListener,
+        IntelligenceTriggerListener,
         CollaboratorNotificationListener,
         AttachmentListener,
         BasePermissionUpdateListener,

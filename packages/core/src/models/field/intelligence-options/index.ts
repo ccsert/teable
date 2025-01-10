@@ -15,7 +15,11 @@ export interface IIntelligenceMethodMeta {
   // 方法描述
   description: string;
   // 方法实现函数类型
-  handler: (prompt: string, context?: IRecord) => Promise<string>;
+  handler: (
+    prompt: string,
+    context?: IRecord,
+    callback?: (prompt: string, context?: IRecord) => string
+  ) => Promise<string>;
   // 返回值类型
   returnType: 'string' | 'number' | 'boolean';
   // 是否支持动态更新
@@ -33,8 +37,12 @@ export const intelligenceMethodMeta: Record<IntelligenceMethod, IIntelligenceMet
   [IntelligenceMethod.TextGeneration]: {
     name: '自定义ai自动填充',
     description: '通过用户自定义提示词，自动填充字段内容',
-    handler: async (prompt: string, context?: IRecord) => {
-      return '';
+    handler: async (
+      prompt: string,
+      context?: IRecord,
+      callback?: (prompt: string, context?: IRecord) => string
+    ) => {
+      return callback ? callback(prompt, context) : '处理中...';
     },
     returnType: 'string',
     supportDynamic: true,
