@@ -11,6 +11,7 @@ import type { ICellContext } from '../calculation/utils/changes';
 import { systemDbFieldNames } from '../field/constant';
 import { FieldService } from '../field/field.service';
 import { RecordOpenApiService } from '../record/open-api/record-open-api.service';
+import type { ICreateRecordsPayload } from '../undo-redo/operations/create-records.operation';
 import type { IUpdateRecordsPayload } from '../undo-redo/operations/update-records.operation';
 
 // 添加类型定义
@@ -43,6 +44,15 @@ type IFieldProcessContext = {
 @Injectable()
 export class IntelligenceService {
   private readonly logger = new Logger(IntelligenceService.name);
+  private processingLocks = new Map<string, boolean>();
+  private cancelTokens = new Map<string, AbortController>();
+  private readonly maxRetries = 3;
+  private readonly smallBatchSize = 2;
+  private readonly batchDelay = 500;
+  private readonly taskCancelledMessage = 'Task cancelled';
+  private readonly thinkingMessage = '思考中...';
+  private readonly thinkingFailedMessage = '思考失败';
+
   constructor(
     private readonly aiService: AiService,
     private readonly fieldService: FieldService,
@@ -57,27 +67,55 @@ export class IntelligenceService {
     fieldId: string,
     intelligenceOptions: IIntelligenceOptions
   ) {
-    if (!this.validateIntelligenceOptions(intelligenceOptions)) {
-      return;
+    const lockKey = `${tableId}:${fieldId}`;
+
+    if (this.cancelTokens.has(lockKey)) {
+      this.cancelTokens.get(lockKey)?.abort();
+      this.cancelTokens.delete(lockKey);
+      this.processingLocks.delete(lockKey);
     }
 
-    const { prompt, dynamicDepends } = intelligenceOptions;
-    const fields = await this.fieldService.getFieldsByQuery(tableId);
-    const fieldMap = this.createFieldMap(fields);
-    const { baseId, dbTableName } = await this.getTableMetadata(tableId);
-    const dependsFieldNames = this.getDependsFieldNames(fields, [...dynamicDepends!, fieldId]);
-    // 获取fieldId的名称
-    const fieldName = fields.find((field) => field.id === fieldId)?.name;
-    await this.processRecordsInChunks(dbTableName, dependsFieldNames, async (records) => {
-      await this.processRecordBatch(tableId, records, {
-        fieldMap,
-        dynamicDepends: dynamicDepends!,
-        prompt: prompt!,
-        baseId,
-        fieldId,
-        fieldName: fieldName!,
+    const abortController = new AbortController();
+    this.cancelTokens.set(lockKey, abortController);
+
+    try {
+      this.processingLocks.set(lockKey, true);
+
+      if (!this.validateIntelligenceOptions(intelligenceOptions)) {
+        return;
+      }
+
+      const { prompt, dynamicDepends } = intelligenceOptions;
+      const fields = await this.fieldService.getFieldsByQuery(tableId);
+      const fieldMap = this.createFieldMap(fields);
+      const { baseId, dbTableName } = await this.getTableMetadata(tableId);
+      const dependsFieldNames = this.getDependsFieldNames(fields, [...dynamicDepends!, fieldId]);
+      // 获取fieldId的名称
+      const fieldName = fields.find((field) => field.id === fieldId)?.name;
+      await this.processRecordsInChunks(dbTableName, dependsFieldNames, async (records) => {
+        if (abortController.signal.aborted) {
+          throw new Error(this.taskCancelledMessage);
+        }
+        await this.processRecordBatch(tableId, records, {
+          fieldMap,
+          dynamicDepends: dynamicDepends!,
+          prompt: prompt!,
+          baseId,
+          fieldId,
+          fieldName: fieldName!,
+          signal: abortController.signal,
+        });
       });
-    });
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === 'Task cancelled') {
+        this.logger.log(`Processing cancelled for field ${fieldId}`);
+        return;
+      }
+      throw error;
+    } finally {
+      this.processingLocks.delete(lockKey);
+      this.cancelTokens.delete(lockKey);
+    }
   }
 
   private validateIntelligenceOptions(options: IIntelligenceOptions): boolean {
@@ -142,84 +180,120 @@ export class IntelligenceService {
       baseId: string;
       fieldId: string;
       fieldName: string;
+      signal: AbortSignal;
     }
   ) {
-    const { fieldMap, dynamicDepends, prompt, fieldId, fieldName } = config;
+    const { fieldMap, dynamicDepends, prompt, fieldId, fieldName, signal } = config;
 
-    // 将记录分成更小的批次处理
-    const smallBatchSize = 3;
-    const batches = [];
-    for (let i = 0; i < records.length; i += smallBatchSize) {
-      batches.push(records.slice(i, i + smallBatchSize));
-    }
+    for (const batch of this.createBatches(records, this.smallBatchSize)) {
+      if (signal.aborted) {
+        throw new Error('Task cancelled');
+      }
 
-    for (const batch of batches) {
-      // 批量更新为"思考中..."状态
-      await Promise.all(
-        batch.map((record) =>
-          this.recordOpenApiService.updateRecord(tableId, record.__id as string, {
-            record: {
-              fields: {
-                [fieldName]: '思考中...',
-              },
-            },
-          })
-        )
-      );
-
-      // 处理记录
-      const processPromises = batch.map(async (record) => {
+      let retryCount = 0;
+      while (retryCount < this.maxRetries) {
         try {
-          const processedPrompt = this.replacePlaceholders(record, {
-            fieldMap,
-            dynamicDepends,
-            prompt,
+          // 1. 先更新为"思考中"状态
+          await this.prismaService.$transaction(async () => {
+            await Promise.all(
+              batch.map((record) =>
+                this.recordOpenApiService.updateRecord(tableId, record.__id as string, {
+                  record: {
+                    fields: {
+                      [fieldName]: this.thinkingMessage,
+                    },
+                  },
+                })
+              )
+            );
           });
 
-          const config = await this.aiService.getAIConfig();
-          const currentTaskModel = TASK_MODEL_MAP.coding;
-          const modelKey = config[currentTaskModel as keyof typeof config] as string;
-          const modelInstance = await this.aiService.getModelInstance(
-            modelKey,
-            config.llmProviders
+          // 2. 处理记录（耗时操作）
+          const results = await Promise.all(
+            batch.map((record) =>
+              this.processRecord(record, { fieldMap, dynamicDepends, prompt, fieldId })
+            )
           );
 
-          const result = await generateText({
-            model: modelInstance,
-            prompt: processedPrompt,
+          // 3. 更新最终结果
+          await this.prismaService.$transaction(async () => {
+            await Promise.all(
+              results.map(({ recordId, success, result }) =>
+                this.recordOpenApiService.updateRecord(tableId, recordId, {
+                  record: {
+                    fields: {
+                      [fieldName]: success ? result : this.thinkingFailedMessage,
+                    },
+                  },
+                })
+              )
+            );
           });
 
-          return {
-            recordId: record.__id as string,
-            success: true,
-            result: result.text,
-          };
+          break;
         } catch (error) {
-          this.logger.error(`Error processing record for field ${fieldId}`, error);
-          return {
-            recordId: record.__id as string,
-            success: false,
-          };
+          retryCount++;
+          this.logger.warn(
+            `Retry ${retryCount}/${this.maxRetries} for batch processing failed`,
+            error
+          );
+          if (retryCount === this.maxRetries) {
+            this.logger.error('Max retries reached, giving up', error);
+            throw error;
+          }
+          await new Promise((resolve) => setTimeout(resolve, Math.pow(2, retryCount) * 100));
         }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, this.batchDelay));
+    }
+  }
+
+  private createBatches<T>(array: T[], size: number): T[][] {
+    const batches: T[][] = [];
+    for (let i = 0; i < array.length; i += size) {
+      batches.push(array.slice(i, i + size));
+    }
+    return batches;
+  }
+
+  private async processRecord(
+    record: Record<string, unknown>,
+    config: {
+      fieldMap: Record<string, string>;
+      dynamicDepends: string[];
+      prompt: string;
+      fieldId: string;
+    }
+  ): Promise<{ recordId: string; success: boolean; result?: string }> {
+    try {
+      const processedPrompt = this.replacePlaceholders(record, {
+        fieldMap: config.fieldMap,
+        dynamicDepends: config.dynamicDepends,
+        prompt: config.prompt,
       });
 
-      const results = await Promise.all(processPromises);
+      const aiConfig = await this.aiService.getAIConfig();
+      const currentTaskModel = TASK_MODEL_MAP.coding;
+      const modelKey = aiConfig[currentTaskModel as keyof typeof aiConfig] as string;
+      const modelInstance = await this.aiService.getModelInstance(modelKey, aiConfig.llmProviders);
 
-      // 批量更新处理结果
-      await Promise.all(
-        results.map(({ recordId, success, result }) =>
-          this.recordOpenApiService.updateRecord(tableId, recordId, {
-            record: {
-              fields: {
-                [fieldName]: success ? result : '思考失败',
-              },
-            },
-          })
-        )
-      );
+      const result = await generateText({
+        model: modelInstance,
+        prompt: processedPrompt,
+      });
 
-      // 添加小延迟，避免数据库压力过大
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      return {
+        recordId: record.__id as string,
+        success: true,
+        result: result.text,
+      };
+    } catch (error) {
+      this.logger.error(`Error processing record for field ${config.fieldId}`, error);
+      return {
+        recordId: record.__id as string,
+        success: false,
+      };
     }
   }
 
@@ -270,7 +344,7 @@ export class IntelligenceService {
       .$queryRawUnsafe<{ [dbFieldName: string]: unknown }[]>(query);
   }
 
-  async triggerIntelligenceUpdate(payload: IUpdateRecordsPayload) {
+  async triggerIntelligenceUpdateRecords(payload: IUpdateRecordsPayload) {
     const { tableId, cellContexts } = payload;
 
     // 按字段分组整理变更数据，优化数据结构
@@ -298,6 +372,45 @@ export class IntelligenceService {
       sortedFields,
       fieldChanges,
     });
+  }
+
+  async triggerIntelligenceCreateRecords(payload: ICreateRecordsPayload) {
+    const { reqParams, resolveData } = payload;
+    const { tableId } = reqParams;
+    const { records } = resolveData;
+
+    // 获取启用了智能功能的字段
+    const intelligenceFields = await this.getIntelligenceFields(tableId);
+    if (intelligenceFields.length === 0) return;
+
+    // 获取所有字段信息
+    const fields = await this.fieldService.getFieldsByQuery(tableId);
+    const fieldMap = this.createFieldMap(fields);
+
+    // 按拓扑排序处理智能字段
+    const sortedFields = this.topologicalSort(intelligenceFields);
+
+    // 处理每条记录
+    for (const record of records) {
+      const recordData = Object.entries(record.fields).reduce(
+        (acc, [fieldId, value]) => {
+          const dbFieldName = fieldMap[fieldId];
+          if (dbFieldName) {
+            acc[dbFieldName] = value;
+          }
+          return acc;
+        },
+        {} as Record<string, unknown>
+      );
+
+      // 串行处理每个智能字段
+      for (const field of sortedFields) {
+        await this.processField(tableId, record.id, recordData, field, {
+          fieldMap,
+          fields: fields as IField[],
+        });
+      }
+    }
   }
 
   private getRecordsToProcess(fieldChanges: IFieldChangesMap) {
@@ -392,18 +505,10 @@ export class IntelligenceService {
         intelligence: intelligence!,
       });
 
-      await this.updateFieldValue(
-        tableId,
-        recordId,
-        fieldName!,
-        result,
-        recordData,
-        fieldMap,
-        fieldId
-      );
+      await this.updateFieldStatus(tableId, recordId, fieldName!, result);
     } catch (error) {
       this.logger.error(`Error processing record ${recordId} for field ${fieldId}`, error);
-      await this.updateFieldStatus(tableId, recordId, fieldName!, '思考失败');
+      await this.updateFieldStatus(tableId, recordId, fieldName!, this.thinkingFailedMessage);
     }
   }
 
@@ -435,6 +540,7 @@ export class IntelligenceService {
     }
   ): Promise<string> {
     const { fieldMap, intelligence } = context;
+    // todo: 无法处理的数据需要跳过
     const processedPrompt = this.replacePlaceholders(recordData, {
       fieldMap,
       dynamicDepends: intelligence.dynamicDepends!,
@@ -452,23 +558,6 @@ export class IntelligenceService {
     });
 
     return result.text;
-  }
-
-  private async updateFieldValue(
-    tableId: string,
-    recordId: string,
-    fieldName: string,
-    value: string,
-    recordData: Record<string, unknown>,
-    fieldMap: Record<string, string>,
-    fieldId: string
-  ) {
-    const dbFieldName = fieldMap[fieldId];
-    if (dbFieldName) {
-      recordData[dbFieldName] = value;
-    }
-
-    await this.updateFieldStatus(tableId, recordId, fieldName, value);
   }
 
   private async updateFieldStatus(
@@ -490,13 +579,15 @@ export class IntelligenceService {
     const fieldChanges = new Map<string, Map<string, { newValue: unknown; oldValue: unknown }>>();
 
     for (const { fieldId, recordId, newValue, oldValue } of cellContexts) {
-      if (newValue === oldValue) continue;
-
+      // 移除新旧值相等的判断，因为我们需要处理从空值更新到有值的情况
       if (!fieldChanges.has(fieldId)) {
         fieldChanges.set(fieldId, new Map());
       }
 
-      fieldChanges.get(fieldId)!.set(recordId, { newValue, oldValue });
+      // 当 oldValue 为空且 newValue 有值时，这是一个需要触发智能填充的场景
+      if (oldValue == null || newValue !== oldValue) {
+        fieldChanges.get(fieldId)!.set(recordId, { newValue, oldValue });
+      }
     }
 
     return fieldChanges;
@@ -522,9 +613,23 @@ export class IntelligenceService {
   ): IIntelligenceField[] {
     return intelligenceFields.filter((field) => {
       const { intelligence } = field.options;
-      return intelligence?.dynamicDepends?.some((dependsFieldId) =>
-        fieldChanges.has(dependsFieldId)
-      );
+      if (!intelligence?.dynamicDepends) return false;
+
+      // 检查是否有依赖字段从空值变为有值
+      return intelligence.dynamicDepends.some((dependsFieldId) => {
+        const changes = fieldChanges.get(dependsFieldId);
+        if (!changes) return false;
+
+        // 检查是否有任何记录的依赖字段从空值变为有值
+        return Array.from(changes.values()).some(({ oldValue, newValue }) => {
+          // 如果新值为空，直接返回false
+          if (newValue == null || newValue === '') {
+            return false;
+          }
+          // 当新旧值不一致时返回true
+          return oldValue !== newValue;
+        });
+      });
     });
   }
 
