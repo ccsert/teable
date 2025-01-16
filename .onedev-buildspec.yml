@@ -10,7 +10,7 @@ jobs:
     condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
   - !RunImagetoolsStep
     name: run buildx
-    arguments: create -t git.dev.aerok.com.cn/AES-DIGITAL/teable/app:latest git.dev.aerok.com.cn/AES-DIGITAL/teable/teable-db-migrate:latest
+    arguments: create -t git.dev.aerok.com.cn/aes-digital-project/teable/app:latest git.dev.aerok.com.cn/aes-digital-project/teable/teable-db-migrate:latest
     condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
   retryCondition: never
   maxRetries: 3
