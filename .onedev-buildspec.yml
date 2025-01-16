@@ -1,0 +1,18 @@
+version: 38
+jobs:
+- name: nestjs-backend
+  steps:
+  - !CheckoutStep
+    name: checkout
+    cloneCredential: !DefaultCredential {}
+    withLfs: false
+    withSubmodules: false
+    condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
+  - !RunImagetoolsStep
+    name: run buildx
+    arguments: create -t git.dev.aerok.com.cn/AES-DIGITAL/teable/app:latest git.dev.aerok.com.cn/AES-DIGITAL/teable/teable-db-migrate:latest
+    condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
+  retryCondition: never
+  maxRetries: 3
+  retryDelay: 30
+  timeout: 14400
