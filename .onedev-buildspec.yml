@@ -10,11 +10,7 @@ jobs:
     condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
   - !RunImagetoolsStep
     name: run buildx
-    arguments: create -t git.dev.aerok.com.cn/aes-digital-project/teable/teable:latest aes-digital-project/teable/teable@@<amd64 manifest digest>
-    registryLogins:
-    - registryUrl: git.dev.aerok.com.cn
-      userName: duanyu
-      passwordSecret: docker
+    arguments: --target=teable --IMAGE_REGISTRY=git.dev.aerok.com.cn/aes-digital-project/teable
     condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
   retryCondition: never
   maxRetries: 3
