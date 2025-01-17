@@ -1,2 +1,2 @@
 export * from './FieldEditor';
-export * from './components/FieldSelector';
+export { FieldSelector as IntelligentFieldSelector } from './components/FieldSelector';
