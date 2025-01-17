@@ -9,6 +9,7 @@ import {
   Lock,
 } from '@teable/icons';
 import { renderToString } from 'react-dom/server';
+import { MagicAI } from '../../../comment/comment-editor/plate-ui/icons';
 
 export interface ISpriteProps {
   fgColor: string;
@@ -55,6 +56,11 @@ const lock = (props: ISpriteProps) => {
   return renderToString(<Lock style={{ color: fgColor }} />);
 };
 
+const magicAI = (props: ISpriteProps) => {
+  const { fgColor } = props;
+  return renderToString(<MagicAI style={{ color: fgColor }} />);
+};
+
 export const sprites = {
   add,
   drag,
@@ -64,6 +70,7 @@ export const sprites = {
   expand,
   collapse,
   lock,
+  magicAI,
 };
 
 export enum GridInnerIcon {
@@ -75,4 +82,6 @@ export enum GridInnerIcon {
   Expand = 'expand',
   Collapse = 'collapse',
   Lock = 'lock',
+  Intelligence = 'intelligence',
+  MagicAI = 'magicAI',
 }
