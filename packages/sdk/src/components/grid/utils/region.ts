@@ -85,6 +85,7 @@ export const getRegionData = (props: ICheckRegionProps): IRegionData => {
     checkIsAllCheckbox(props) ||
     checkIsAppendRow(props) ||
     checkIsRowHeader(props) ||
+    // checkIsFillHandler(props) ||
     checkIsCell(props) ||
     checkIsColumnHeader(props) ||
     checkIsColumnIntelligence(props) ||
