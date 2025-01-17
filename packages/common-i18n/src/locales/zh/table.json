@@ -34,6 +34,16 @@
         "label": "API 接口",
         "restfulApi": "Restful API",
         "databaseConnection": "数据库连接"
+      },
+      "personalView": {
+        "personal": "个人",
+        "collaborative": "协同",
+        "dialog": {
+          "title": "切换到视图协同模式",
+          "description": "切换到视图协同模式后，视图的个人配置将同步给所有人，请确认是否同步",
+          "cancelText": "不同步",
+          "confirmText": "同步"
+        }
       }
     }
   },
@@ -179,6 +189,7 @@
       "previewDependenciesGraph": "预览依赖关系图",
       "areYouSurePerformIt": "确定要执行此操作吗？",
       "addDescription": "添加描述",
+      "dbFieldName": "物理字段名",
       "description": "描述",
       "descriptionPlaceholder": "描述这个字段（可选）",
       "type": "字段类型",
@@ -296,7 +307,10 @@
       "clearSuccessful": "清除成功",
       "deleting": "正在删除...",
       "deleteSuccessful": "删除成功",
-      "pasteFileFailed": "文件只能粘贴到附件字段中"
+      "pasteFileFailed": "文件只能粘贴到附件字段中",
+      "copyError": {
+        "noFocus": "请保持页面激活，不要切换窗口"
+      }
     },
     "graph": {
       "tableLabel": "表格名称",
