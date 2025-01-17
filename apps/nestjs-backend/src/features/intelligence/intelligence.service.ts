@@ -106,20 +106,25 @@ export class IntelligenceService {
       const dependsFieldNames = this.getDependsFieldNames(fields, [...dynamicDepends!, fieldId]);
       // 获取fieldId的名称
       const fieldName = fields.find((field) => field.id === fieldId)?.name;
-      await this.processRecordsInChunks(dbTableName, dependsFieldNames, async (records) => {
-        if (abortController.signal.aborted) {
-          throw new Error(this.taskCancelledMessage);
+      await this.processRecordsInChunks(
+        dbTableName,
+        fieldMap[fieldId],
+        dependsFieldNames,
+        async (records) => {
+          if (abortController.signal.aborted) {
+            throw new Error(this.taskCancelledMessage);
+          }
+          await this.processRecordBatch(tableId, records, {
+            fieldMap,
+            dynamicDepends: dynamicDepends!,
+            prompt: prompt!,
+            baseId,
+            fieldId,
+            fieldName: fieldName!,
+            signal: abortController.signal,
+          });
         }
-        await this.processRecordBatch(tableId, records, {
-          fieldMap,
-          dynamicDepends: dynamicDepends!,
-          prompt: prompt!,
-          baseId,
-          fieldId,
-          fieldName: fieldName!,
-          signal: abortController.signal,
-        });
-      });
+      );
     } catch (error: unknown) {
       if (error instanceof Error && error.message === 'Task cancelled') {
         this.logger.log(`Processing cancelled for field ${fieldId}`);
@@ -171,16 +176,26 @@ export class IntelligenceService {
 
   private async processRecordsInChunks(
     dbTableName: string,
+    fieldName: string,
     dependsFieldNames: string[],
     processor: (records: Record<string, unknown>[]) => Promise<void>
   ) {
     const rowCount = await this.getRowCount(dbTableName);
     const chunkSize = this.thresholdConfig.calcChunkSize;
     const totalPages = Math.ceil(rowCount / chunkSize);
-
+    // 将dependsFieldNames去除fieldId
+    const otherDependsFieldNames = dependsFieldNames.filter((ofieldId) => ofieldId !== fieldName);
     for (let page = 0; page < totalPages; page++) {
       const records = await this.getRecordsByPage(dbTableName, dependsFieldNames, page, chunkSize);
-      await processor(records);
+      // 过滤记录：只要有任何一个依赖字段包含有效值就保留
+      const filteredRecords = records.filter((record: Record<string, unknown>) => {
+        return otherDependsFieldNames.some((fieldId) => {
+          const value = record[fieldId];
+          // 检查值是否为有效值（非null、非undefined、非空字符串）
+          return value != null && value !== '';
+        });
+      });
+      await processor(filteredRecords);
     }
   }
 
