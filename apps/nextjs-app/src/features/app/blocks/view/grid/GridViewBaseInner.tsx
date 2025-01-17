@@ -835,74 +835,72 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
   };
 
   return (
-    <>
-      <div ref={containerRef} className="relative size-full">
-        <Grid
-          ref={gridRef}
-          theme={theme}
-          style={{ pointerEvents: inPrefilling ? 'none' : 'auto' }}
-          draggable={draggable}
-          isTouchDevice={isTouchDevice}
-          rowCount={realRowCount}
-          rowHeight={rowHeight}
-          freezeColumnCount={frozenColumnCount}
-          columnStatistics={columnStatistics}
-          columns={columns}
-          commentCountMap={commentCountMap}
-          customIcons={customIcons}
-          rowControls={rowControls}
-          collapsedGroupIds={collapsedGroupIds}
-          groupCollection={groupCollection}
-          groupPoints={groupPoints as unknown as IGroupPoint[]}
-          collaborators={collaborators}
-          searchCursor={searchCursor}
-          searchHitIndex={searchHitIndex}
-          getCellContent={getCellContent}
-          onDelete={getAuthorizedFunction(onDelete, 'record|update')}
-          onDragStart={onDragStart}
-          onRowOrdered={onRowOrdered}
-          onRowExpand={onRowExpandInner}
-          onRowAppend={
-            isTouchDevice ? undefined : getAuthorizedFunction(onRowAppend, 'record|create')
-          }
-          onCellEdited={getAuthorizedFunction(onCellEdited, 'record|update')}
-          onColumnAppend={getAuthorizedFunction(onColumnAppend, 'field|create')}
-          onColumnFreeze={getAuthorizedFunction(onColumnFreeze, 'view|update')}
-          onColumnResize={getAuthorizedFunction(onColumnResize, 'view|update')}
-          onColumnOrdered={getAuthorizedFunction(onColumnOrdered, 'view|update')}
-          onContextMenu={onContextMenu}
-          onColumnHeaderClick={onColumnHeaderClick}
-          onColumnStatisticClick={getAuthorizedFunction(onColumnStatisticClick, 'view|update')}
-          onVisibleRegionChanged={onVisibleRegionChanged}
-          onSelectionChanged={onSelectionChanged}
-          onColumnHeaderDblClick={onColumnHeaderDblClick}
-          onColumnHeaderMenuClick={onColumnHeaderMenuClick}
-          onCollapsedGroupChanged={onCollapsedGroupChanged}
-          onScrollChanged={onGridScrollChanged}
-          onUndo={undo}
-          onRedo={redo}
-          onCopy={onCopy}
-          onPaste={onPaste}
-          onItemClick={onItemClick}
-          onItemHovered={onItemHovered}
-          onColumnIntelligenceClick={handleIntelligenceClick}
-        />
+    <div ref={containerRef} className="relative size-full">
+      <Grid
+        ref={gridRef}
+        theme={theme}
+        style={{ pointerEvents: inPrefilling ? 'none' : 'auto' }}
+        draggable={draggable}
+        isTouchDevice={isTouchDevice}
+        rowCount={realRowCount}
+        rowHeight={rowHeight}
+        freezeColumnCount={frozenColumnCount}
+        columnStatistics={columnStatistics}
+        columns={columns}
+        commentCountMap={commentCountMap}
+        customIcons={customIcons}
+        rowControls={rowControls}
+        collapsedGroupIds={collapsedGroupIds}
+        groupCollection={groupCollection}
+        groupPoints={groupPoints as unknown as IGroupPoint[]}
+        collaborators={collaborators}
+        searchCursor={searchCursor}
+        searchHitIndex={searchHitIndex}
+        getCellContent={getCellContent}
+        onDelete={getAuthorizedFunction(onDelete, 'record|update')}
+        onDragStart={onDragStart}
+        onRowOrdered={onRowOrdered}
+        onRowExpand={onRowExpandInner}
+        onRowAppend={
+          isTouchDevice ? undefined : getAuthorizedFunction(onRowAppend, 'record|create')
+        }
+        onCellEdited={getAuthorizedFunction(onCellEdited, 'record|update')}
+        onColumnAppend={getAuthorizedFunction(onColumnAppend, 'field|create')}
+        onColumnFreeze={getAuthorizedFunction(onColumnFreeze, 'view|update')}
+        onColumnResize={getAuthorizedFunction(onColumnResize, 'view|update')}
+        onColumnOrdered={getAuthorizedFunction(onColumnOrdered, 'view|update')}
+        onContextMenu={onContextMenu}
+        onColumnHeaderClick={onColumnHeaderClick}
+        onColumnStatisticClick={getAuthorizedFunction(onColumnStatisticClick, 'view|update')}
+        onVisibleRegionChanged={onVisibleRegionChanged}
+        onSelectionChanged={onSelectionChanged}
+        onColumnHeaderDblClick={onColumnHeaderDblClick}
+        onColumnHeaderMenuClick={onColumnHeaderMenuClick}
+        onCollapsedGroupChanged={onCollapsedGroupChanged}
+        onScrollChanged={onGridScrollChanged}
+        onUndo={undo}
+        onRedo={redo}
+        onCopy={onCopy}
+        onPaste={onPaste}
+        onItemClick={onItemClick}
+        onItemHovered={onItemHovered}
+        onColumnIntelligenceClick={handleIntelligenceClick}
+      />
 
-        <Dialog open={openAIDialog} onOpenChange={setOpenAIDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>AI 内容生成</DialogTitle>
-              <DialogDescription>确定要为该列生成 AI 内容吗？此操作无法撤销。</DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpenAIDialog(false)}>
-                取消
-              </Button>
-              <Button onClick={handleConfirmAI}>确定</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+      <Dialog open={openAIDialog} onOpenChange={setOpenAIDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>AI 内容生成</DialogTitle>
+            <DialogDescription>确定要为该列生成 AI 内容吗？此操作无法撤销。</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenAIDialog(false)}>
+              取消
+            </Button>
+            <Button onClick={handleConfirmAI}>确定</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {inPrefilling && (
         <PrefillingRowContainer
           style={prefillingRowStyle}
@@ -995,6 +993,6 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
         }}
         onConfirm={() => newRecords && mutateCreateRecord(newRecords)}
       />
-    </>
+    </div>
   );
 };
