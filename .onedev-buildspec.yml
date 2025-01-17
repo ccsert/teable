@@ -1,0 +1,22 @@
+version: 38
+jobs:
+- name: nestjs-backend
+  steps:
+  - !CheckoutStep
+    name: checkout
+    cloneCredential: !DefaultCredential {}
+    withLfs: false
+    withSubmodules: false
+    condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
+  - !RunImagetoolsStep
+    name: run buildx
+    arguments: --IMAGE_REGISTRY=git.dev.aerok.com.cn/aes-digital-project/teable
+    registryLogins:
+    - registryUrl: git.dev.aerok.com.cn
+      userName: duanyu
+      passwordSecret: docker
+    condition: ALL_PREVIOUS_STEPS_WERE_SUCCESSFUL
+  retryCondition: never
+  maxRetries: 3
+  retryDelay: 30
+  timeout: 14400
