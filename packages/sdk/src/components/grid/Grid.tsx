@@ -118,6 +118,8 @@ export interface IGridExternalProps {
    * Triggered when the mouse clicks the every type of region
    */
   onItemClick?: (type: RegionType, bounds: IRectangle, cellItem: ICellItem) => void;
+
+  onColumnIntelligenceClick?: (columnIndex: number, bounds: IRectangle) => void;
 }
 
 export interface IGridProps extends IGridExternalProps {
@@ -212,6 +214,7 @@ const GridBase: ForwardRefRenderFunction<IGridRef, IGridProps> = (props, forward
     onItemHovered,
     onItemClick,
     onScrollChanged,
+    onColumnIntelligenceClick,
   } = props;
 
   useImperativeHandle(forwardRef, () => ({
@@ -629,6 +632,7 @@ const GridBase: ForwardRefRenderFunction<IGridRef, IGridProps> = (props, forward
             onColumnFreeze={onColumnFreeze}
             onItemHovered={onItemHovered}
             onItemClick={onItemClick}
+            onColumnIntelligenceClick={onColumnIntelligenceClick}
           />
         )}
       </div>

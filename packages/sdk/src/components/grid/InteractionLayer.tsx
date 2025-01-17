@@ -33,6 +33,7 @@ import type {
   IInnerCell,
   ILinearRow,
   IMouseState,
+  IRectangle,
   IRowControlItem,
   IScrollState,
 } from './interface';
@@ -82,6 +83,7 @@ export interface IInteractionLayerProps
   setMouseState: Dispatch<SetStateAction<IMouseState>>;
   scrollBy: (deltaX: number, deltaY: number) => void;
   scrollToItem: (position: [columnIndex: number, rowIndex: number]) => void;
+  onColumnIntelligenceClick?: (columnIndex: number, bounds: IRectangle) => void;
 }
 
 export interface IInteractionLayerRef {
@@ -149,6 +151,7 @@ export const InteractionLayerBase: ForwardRefRenderFunction<
     onColumnStatisticClick,
     onCollapsedGroupChanged,
     onDragStart: _onDragStart,
+    onColumnIntelligenceClick,
   } = props;
 
   useImperativeHandle(ref, () => ({
@@ -404,7 +407,7 @@ export const InteractionLayerBase: ForwardRefRenderFunction<
     if (regionType !== type) return;
 
     const { realIndex: rowIndex } = getLinearRow(hoverRowIndex);
-
+    console.log('type', type);
     switch (type) {
       case RegionType.AppendRow: {
         if (activeCell != null) {
@@ -497,6 +500,22 @@ export const InteractionLayerBase: ForwardRefRenderFunction<
           return onCollapsedGroupChanged?.(newCollapsedGroupIds);
         }
         return onCollapsedGroupChanged?.(new Set([...collapsedGroupIds, id]));
+      }
+      case RegionType.ColumnIntelligence: {
+        const column = columns[columnIndex];
+        console.log(column, onColumnIntelligenceClick);
+
+        if (column?.intelligence && onColumnIntelligenceClick) {
+          console.log(column);
+
+          return onColumnIntelligenceClick(columnIndex, {
+            x: coordInstance.getColumnRelativeOffset(columnIndex, scrollLeft),
+            y: 0,
+            width: coordInstance.getColumnWidth(columnIndex),
+            height: columnHeadHeight,
+          });
+        }
+        return;
       }
     }
 

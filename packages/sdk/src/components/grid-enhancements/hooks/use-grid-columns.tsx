@@ -1,4 +1,9 @@
-import type { IAttachmentCellValue, INumberShowAs, ISingleLineTextShowAs } from '@teable/core';
+import type {
+  IAttachmentCellValue,
+  IIntelligenceOptions,
+  INumberShowAs,
+  ISingleLineTextShowAs,
+} from '@teable/core';
 import { RowHeightLevel, CellValueType, ColorUtils, FieldType } from '@teable/core';
 import { useTheme } from '@teable/next-themes';
 import { keyBy } from 'lodash';
@@ -127,7 +132,7 @@ const useGenerateColumns = () => {
           if (!field) return undefined;
           const columnMeta = view?.columnMeta[field.id] ?? null;
           const width = columnMeta?.width || GRID_DEFAULT.columnWidth;
-          const { id, type, name, description, isLookup, isPrimary, notNull } = field;
+          const { id, type, name, description, isLookup, isPrimary, notNull, options } = field;
           const customTheme = getColumnThemeByField({
             field,
             theme,
@@ -135,7 +140,7 @@ const useGenerateColumns = () => {
             groupFieldIds,
             filterFieldIds,
           });
-
+          const intelligence = options?.intelligence as IIntelligenceOptions;
           return {
             id,
             name: notNull ? `${name} *` : name,
@@ -144,6 +149,7 @@ const useGenerateColumns = () => {
             customTheme,
             isPrimary,
             hasMenu,
+            ...(intelligence && { intelligence }),
             statisticLabel: {
               showAlways: i === 0,
               label: i === 0 ? t('common.summaryTip') : t('common.summary'),

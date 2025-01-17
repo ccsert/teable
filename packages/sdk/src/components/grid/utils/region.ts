@@ -85,9 +85,9 @@ export const getRegionData = (props: ICheckRegionProps): IRegionData => {
     checkIsAllCheckbox(props) ||
     checkIsAppendRow(props) ||
     checkIsRowHeader(props) ||
-    // checkIsFillHandler(props) ||
     checkIsCell(props) ||
     checkIsColumnHeader(props) ||
+    checkIsColumnIntelligence(props) ||
     BLANK_REGION_DATA
   );
 };
@@ -404,11 +404,20 @@ const checkIsColumnHeader = (props: ICheckRegionProps): IRegionData | null => {
 
   if (rowIndex === -1 && columnIndex > -1) {
     const { scrollLeft } = scrollState;
+    const width = coordInstance.getColumnWidth(columnIndex);
+    const startOffsetX = coordInstance.getColumnRelativeOffset(columnIndex, scrollLeft);
+
+    // 检查是否在 intelligence 图标区域
+    if (columns[columnIndex]?.intelligence) {
+      const iconX = startOffsetX + width - 2 * iconSizeXS - columnHeadPadding;
+      if (x >= iconX && x <= iconX + iconSizeXS) {
+        return null;
+      }
+    }
+
     const { rowInitSize } = coordInstance;
     const { isPrimary, description, hasMenu: hasColumnMenu } = columns[columnIndex];
     const hasMenu = hasColumnMenu && isColumnHeaderMenuVisible;
-    const width = coordInstance.getColumnWidth(columnIndex);
-    const startOffsetX = coordInstance.getColumnRelativeOffset(columnIndex, scrollLeft);
     const endOffsetX = startOffsetX + width;
     const columnMenuX = hasMenu ? endOffsetX - columnHeadPadding / 2 - iconSizeXS : endOffsetX;
 
@@ -473,4 +482,35 @@ const checkIsColumnHeader = (props: ICheckRegionProps): IRegionData | null => {
     };
   }
   return null;
+};
+
+const checkIsColumnIntelligence = (props: ICheckRegionProps): IRegionData => {
+  const {
+    position,
+    columns,
+    coordInstance,
+    scrollState,
+    theme: { iconSizeXS },
+  } = props;
+  const { columnIndex, rowIndex } = position;
+  const { scrollLeft } = scrollState;
+  const { columnHeadPadding } = GRID_DEFAULT;
+
+  if (rowIndex === -1 && columnIndex > -1 && columns[columnIndex]?.intelligence) {
+    const columnWidth = coordInstance.getColumnWidth(columnIndex);
+    const x = coordInstance.getColumnRelativeOffset(columnIndex, scrollLeft);
+    const iconX = x + columnWidth - 2 * iconSizeXS - columnHeadPadding;
+
+    if (position.x >= iconX && position.x <= iconX + iconSizeXS) {
+      return {
+        type: RegionType.ColumnIntelligence,
+        x: iconX,
+        y: position.y,
+        width: iconSizeXS,
+        height: iconSizeXS,
+      };
+    }
+  }
+
+  return BLANK_REGION_DATA;
 };

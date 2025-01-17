@@ -1,3 +1,4 @@
+import type { IIntelligenceOptions } from '@teable/core';
 import type { IUser } from '../../context';
 import type { IGridTheme } from './configs/gridTheme';
 import type { ICell } from './renderers/cell-renderer/interface';
@@ -56,6 +57,7 @@ export enum RegionType {
   FillHandler = 'FillHandler',
   Blank = 'Blank',
   None = 'None',
+  ColumnIntelligence = 'ColumnIntelligence',
 }
 
 export type ICellRange = [colIndex: number, rowIndex: number]; // The beginning and the end come in pairs
@@ -86,6 +88,7 @@ export interface IGridColumn {
   readonly?: boolean;
   isPrimary?: boolean;
   description?: string;
+  intelligence?: IIntelligenceOptions;
   statisticLabel?: {
     showAlways: boolean;
     label: string;
