@@ -1195,7 +1195,7 @@ export const drawCommentCount = (
 
 export const drawColumnHeader = (ctx: CanvasRenderingContext2D, props: IFieldHeadDrawerProps) => {
   const { x, y, width, height, theme, fill, column, hasMenu, spriteManager } = props;
-  const { name, icon, description, hasMenu: hasColumnMenu, isPrimary } = column;
+  const { name, icon, description, hasMenu: hasColumnMenu, isPrimary, intelligence } = column;
   const {
     cellLineColor,
     columnHeaderBg,
@@ -1274,6 +1274,18 @@ export const drawColumnHeader = (ctx: CanvasRenderingContext2D, props: IFieldHea
       x: hasMenuInner
         ? x + width - 2 * iconSizeXS - columnHeadPadding
         : x + width - iconSizeXS - columnHeadPadding,
+      y: y + (height - iconSizeXS) / 2,
+      size: iconSizeXS,
+      theme,
+    });
+
+    maxTextWidth = maxTextWidth - iconSizeXS - columnHeadPadding;
+  }
+
+  if (intelligence && intelligence.enabled) {
+    spriteManager.drawSprite(ctx, {
+      sprite: GridInnerIcon.MagicAI,
+      x: x + width - 2 * iconSizeXS - columnHeadPadding,
       y: y + (height - iconSizeXS) / 2,
       size: iconSizeXS,
       theme,
