@@ -407,7 +407,6 @@ export const InteractionLayerBase: ForwardRefRenderFunction<
     if (regionType !== type) return;
 
     const { realIndex: rowIndex } = getLinearRow(hoverRowIndex);
-    console.log('type', type);
     switch (type) {
       case RegionType.AppendRow: {
         if (activeCell != null) {

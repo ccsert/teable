@@ -8,7 +8,7 @@ import {
   stringifyClipboardText,
 } from '@teable/core';
 import type { ICreateRecordsRo, IGroupPointsVo, IUpdateOrderRo } from '@teable/openapi';
-import { createRecords } from '@teable/openapi';
+import { createRecords, intelligenceGenerateBatch } from '@teable/openapi';
 import type {
   IRectangle,
   IPosition,
@@ -69,6 +69,15 @@ import {
   useViewId,
 } from '@teable/sdk/hooks';
 import { useToast } from '@teable/ui-lib';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Button,
+} from '@teable/ui-lib/shadcn';
 import { isEqual, keyBy, uniqueId, groupBy } from 'lodash';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
@@ -132,6 +141,8 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
   const { setGridRef, searchCursor } = useGridSearchStore();
   const [expandRecord, setExpandRecord] = useState<{ tableId: string; recordId: string }>();
   const [newRecords, setNewRecords] = useState<ICreateRecordsRo['records']>();
+  const [openAIDialog, setOpenAIDialog] = useState(false);
+  const [currentColumn, setCurrentColumn] = useState<{ index: number; id: string } | null>(null);
 
   const gridRef = useRef<IGridRef>(null);
   const presortGridRef = useRef<IGridRef>(null);
@@ -786,57 +797,112 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
     setGridRef?.(gridRef);
   }, [setGridRef]);
 
+  const handleIntelligenceClick = useCallback(
+    async (columnIndex: number) => {
+      const column = originalColumns[columnIndex];
+      setCurrentColumn({ index: columnIndex, id: column.id });
+      setOpenAIDialog(true);
+    },
+    [originalColumns]
+  );
+
+  const handleConfirmAI = async () => {
+    if (!currentColumn || !tableId) return;
+
+    try {
+      const column = originalColumns[currentColumn.index];
+      console.log(column.intelligence, 'column.intelligence');
+      const res = await intelligenceGenerateBatch({
+        tableId: tableId,
+        fieldId: currentColumn.id,
+        options: column.intelligence!,
+      });
+
+      toast({
+        title: 'Success',
+        description: res.data.message,
+      });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to generate AI content',
+      });
+    } finally {
+      setOpenAIDialog(false);
+      setCurrentColumn(null);
+    }
+  };
+
   return (
-    <div ref={containerRef} className="relative size-full">
-      <Grid
-        ref={gridRef}
-        theme={theme}
-        style={{ pointerEvents: inPrefilling ? 'none' : 'auto' }}
-        draggable={draggable}
-        isTouchDevice={isTouchDevice}
-        rowCount={realRowCount}
-        rowHeight={rowHeight}
-        freezeColumnCount={frozenColumnCount}
-        columnStatistics={columnStatistics}
-        columns={columns}
-        commentCountMap={commentCountMap}
-        customIcons={customIcons}
-        rowControls={rowControls}
-        collapsedGroupIds={collapsedGroupIds}
-        groupCollection={groupCollection}
-        groupPoints={groupPoints as unknown as IGroupPoint[]}
-        collaborators={collaborators}
-        searchCursor={searchCursor}
-        searchHitIndex={searchHitIndex}
-        getCellContent={getCellContent}
-        onDelete={getAuthorizedFunction(onDelete, 'record|update')}
-        onDragStart={onDragStart}
-        onRowOrdered={onRowOrdered}
-        onRowExpand={onRowExpandInner}
-        onRowAppend={
-          isTouchDevice ? undefined : getAuthorizedFunction(onRowAppend, 'record|create')
-        }
-        onCellEdited={getAuthorizedFunction(onCellEdited, 'record|update')}
-        onColumnAppend={getAuthorizedFunction(onColumnAppend, 'field|create')}
-        onColumnFreeze={getAuthorizedFunction(onColumnFreeze, 'view|update')}
-        onColumnResize={getAuthorizedFunction(onColumnResize, 'view|update')}
-        onColumnOrdered={getAuthorizedFunction(onColumnOrdered, 'view|update')}
-        onContextMenu={onContextMenu}
-        onColumnHeaderClick={onColumnHeaderClick}
-        onColumnStatisticClick={getAuthorizedFunction(onColumnStatisticClick, 'view|update')}
-        onVisibleRegionChanged={onVisibleRegionChanged}
-        onSelectionChanged={onSelectionChanged}
-        onColumnHeaderDblClick={onColumnHeaderDblClick}
-        onColumnHeaderMenuClick={onColumnHeaderMenuClick}
-        onCollapsedGroupChanged={onCollapsedGroupChanged}
-        onScrollChanged={onGridScrollChanged}
-        onUndo={undo}
-        onRedo={redo}
-        onCopy={onCopy}
-        onPaste={onPaste}
-        onItemClick={onItemClick}
-        onItemHovered={onItemHovered}
-      />
+    <>
+      <div ref={containerRef} className="relative size-full">
+        <Grid
+          ref={gridRef}
+          theme={theme}
+          style={{ pointerEvents: inPrefilling ? 'none' : 'auto' }}
+          draggable={draggable}
+          isTouchDevice={isTouchDevice}
+          rowCount={realRowCount}
+          rowHeight={rowHeight}
+          freezeColumnCount={frozenColumnCount}
+          columnStatistics={columnStatistics}
+          columns={columns}
+          commentCountMap={commentCountMap}
+          customIcons={customIcons}
+          rowControls={rowControls}
+          collapsedGroupIds={collapsedGroupIds}
+          groupCollection={groupCollection}
+          groupPoints={groupPoints as unknown as IGroupPoint[]}
+          collaborators={collaborators}
+          searchCursor={searchCursor}
+          searchHitIndex={searchHitIndex}
+          getCellContent={getCellContent}
+          onDelete={getAuthorizedFunction(onDelete, 'record|update')}
+          onDragStart={onDragStart}
+          onRowOrdered={onRowOrdered}
+          onRowExpand={onRowExpandInner}
+          onRowAppend={
+            isTouchDevice ? undefined : getAuthorizedFunction(onRowAppend, 'record|create')
+          }
+          onCellEdited={getAuthorizedFunction(onCellEdited, 'record|update')}
+          onColumnAppend={getAuthorizedFunction(onColumnAppend, 'field|create')}
+          onColumnFreeze={getAuthorizedFunction(onColumnFreeze, 'view|update')}
+          onColumnResize={getAuthorizedFunction(onColumnResize, 'view|update')}
+          onColumnOrdered={getAuthorizedFunction(onColumnOrdered, 'view|update')}
+          onContextMenu={onContextMenu}
+          onColumnHeaderClick={onColumnHeaderClick}
+          onColumnStatisticClick={getAuthorizedFunction(onColumnStatisticClick, 'view|update')}
+          onVisibleRegionChanged={onVisibleRegionChanged}
+          onSelectionChanged={onSelectionChanged}
+          onColumnHeaderDblClick={onColumnHeaderDblClick}
+          onColumnHeaderMenuClick={onColumnHeaderMenuClick}
+          onCollapsedGroupChanged={onCollapsedGroupChanged}
+          onScrollChanged={onGridScrollChanged}
+          onUndo={undo}
+          onRedo={redo}
+          onCopy={onCopy}
+          onPaste={onPaste}
+          onItemClick={onItemClick}
+          onItemHovered={onItemHovered}
+          onColumnIntelligenceClick={handleIntelligenceClick}
+        />
+
+        <Dialog open={openAIDialog} onOpenChange={setOpenAIDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>AI 内容生成</DialogTitle>
+              <DialogDescription>确定要为该列生成 AI 内容吗？此操作无法撤销。</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenAIDialog(false)}>
+                取消
+              </Button>
+              <Button onClick={handleConfirmAI}>确定</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
       {inPrefilling && (
         <PrefillingRowContainer
           style={prefillingRowStyle}
@@ -929,6 +995,6 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
         }}
         onConfirm={() => newRecords && mutateCreateRecord(newRecords)}
       />
-    </div>
+    </>
   );
 };

@@ -62,6 +62,20 @@ export class IntelligenceService {
     private readonly recordOpenApiService: RecordOpenApiService
   ) {}
 
+  async generateStream(prompt: string) {
+    throw new Error('Method not implemented.');
+  }
+  async generateBatch(tableId: string, fieldId: string, intelligenceOptions: IIntelligenceOptions) {
+    // 立即返回，表示任务已开始
+    this.triggerIntelligenceCreate(tableId, fieldId, intelligenceOptions).catch((error) => {
+      this.logger.error(`批量生成任务失败 - tableId: ${tableId}, fieldId: ${fieldId}`, error);
+    });
+
+    return {
+      success: true,
+      message: '批量生成任务已启动',
+    };
+  }
   async triggerIntelligenceCreate(
     tableId: string,
     fieldId: string,
@@ -138,7 +152,7 @@ export class IntelligenceService {
   }
 
   private async getTableMetadata(tableId: string) {
-    return await this.prismaService.tableMeta.findUniqueOrThrow({
+    return await this.prismaService.txClient().tableMeta.findUniqueOrThrow({
       where: { id: tableId },
       select: {
         baseId: true,
@@ -378,6 +392,11 @@ export class IntelligenceService {
     const { reqParams, resolveData } = payload;
     const { tableId } = reqParams;
     const { records } = resolveData;
+    // 检查所有记录是否都为空
+    const hasAnyData = records.some((record) => Object.keys(record.fields).length > 0);
+    if (!hasAnyData) {
+      return;
+    }
 
     // 获取启用了智能功能的字段
     const intelligenceFields = await this.getIntelligenceFields(tableId);
@@ -495,10 +514,10 @@ export class IntelligenceService {
     if (!this.validateFieldProcessing(fieldName, intelligence)) return;
 
     try {
-      if (this.hasMissingDependencies(intelligence!, fieldMap, recordData)) {
-        this.logger.warn(`Missing dependencies for record ${recordId}, field ${fieldId}`);
-        return;
-      }
+      // if (this.hasMissingDependencies(intelligence!, fieldMap, recordData)) {
+      //   this.logger.warn(`Missing dependencies for record ${recordId}, field ${fieldId}`);
+      //   return;
+      // }
 
       const result = await this.generateFieldValue(recordData, {
         fieldMap,
