@@ -373,7 +373,7 @@ export class IntelligenceService {
       .$queryRawUnsafe<{ [dbFieldName: string]: unknown }[]>(query);
   }
 
-  async triggerIntelligenceUpdateRecords(payload: IUpdateRecordsPayload) {
+  async triggerIntelligenceUpdateRecords(payload: IUpdateRecordsPayload, isEvent: boolean = false) {
     const { tableId, cellContexts } = payload;
 
     // 按字段分组整理变更数据，优化数据结构
@@ -381,7 +381,13 @@ export class IntelligenceService {
     if (fieldChanges.size === 0) return;
 
     // 获取启用了智能功能的字段
-    const intelligenceFields = await this.getIntelligenceFields(tableId);
+    let intelligenceFields = await this.getIntelligenceFields(tableId);
+    if (isEvent) {
+      // 事件触发时，只处理dynamic为true的字段
+      intelligenceFields = intelligenceFields.filter(
+        (field) => field.options.intelligence?.dynamic
+      );
+    }
     if (intelligenceFields.length === 0) return;
 
     // 找出受影响的智能字段并排序
@@ -403,7 +409,7 @@ export class IntelligenceService {
     });
   }
 
-  async triggerIntelligenceCreateRecords(payload: ICreateRecordsPayload) {
+  async triggerIntelligenceCreateRecords(payload: ICreateRecordsPayload, isEvent: boolean = false) {
     const { reqParams, resolveData } = payload;
     const { tableId } = reqParams;
     const { records } = resolveData;
@@ -414,7 +420,13 @@ export class IntelligenceService {
     }
 
     // 获取启用了智能功能的字段
-    const intelligenceFields = await this.getIntelligenceFields(tableId);
+    let intelligenceFields = await this.getIntelligenceFields(tableId);
+    if (isEvent) {
+      // 事件触发时，只处理dynamic为true的字段
+      intelligenceFields = intelligenceFields.filter(
+        (field) => field.options.intelligence?.dynamic
+      );
+    }
     if (intelligenceFields.length === 0) return;
 
     // 获取所有字段信息

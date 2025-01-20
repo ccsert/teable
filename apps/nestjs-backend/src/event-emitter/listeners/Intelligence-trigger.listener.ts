@@ -32,7 +32,7 @@ export class IntelligenceTriggerListener {
 
       const options = field.options as IFieldOptions;
       // 如果intelligence选项发生变化，则触发intelligence
-      if (options?.intelligence && options.intelligence?.enabled) {
+      if (options?.intelligence && options.intelligence?.enabled && options.intelligence?.dynamic) {
         await this.intelligenceService.triggerIntelligenceCreate(
           tableId,
           field.id,
@@ -57,8 +57,10 @@ export class IntelligenceTriggerListener {
 
     const { payload, context } = listenerEvent;
     const { tableId, record } = payload;
-    const { user } = context;
-
+    const { user, entry } = context;
+    if (entry?.type === 'intelligence_controller') {
+      return;
+    }
     const records = Array.isArray(record) ? record : [record];
     const cellContexts = records.flatMap((rec) =>
       Object.entries(rec.fields).map(([fieldId, fieldValue]) => ({
@@ -71,13 +73,16 @@ export class IntelligenceTriggerListener {
 
     if (cellContexts.length === 0) return;
 
-    await this.intelligenceService.triggerIntelligenceUpdateRecords({
-      tableId,
-      windowId: '',
-      userId: user?.id || '',
-      recordIds: records.map((rec) => rec.id),
-      fieldIds: [...new Set(cellContexts.map((ctx) => ctx.fieldId))],
-      cellContexts,
-    });
+    await this.intelligenceService.triggerIntelligenceUpdateRecords(
+      {
+        tableId,
+        windowId: '',
+        userId: user?.id || '',
+        recordIds: records.map((rec) => rec.id),
+        fieldIds: [...new Set(cellContexts.map((ctx) => ctx.fieldId))],
+        cellContexts,
+      },
+      true
+    );
   }
 }
