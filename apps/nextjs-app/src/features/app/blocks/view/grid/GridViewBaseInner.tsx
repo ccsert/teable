@@ -1,14 +1,15 @@
 import { useMutation } from '@tanstack/react-query';
-import type { IFieldVo } from '@teable/core';
+import type { IAttachmentCellValue, IFieldVo } from '@teable/core';
 import {
   FieldKeyType,
+  FieldType,
   RowHeightLevel,
   contractColorForTheme,
   fieldVoSchema,
   stringifyClipboardText,
 } from '@teable/core';
 import type { ICreateRecordsRo, IGroupPointsVo, IUpdateOrderRo } from '@teable/openapi';
-import { createRecords, intelligenceGenerateBatch } from '@teable/openapi';
+import { createRecords, intelligenceGenerateBatch, UploadType } from '@teable/openapi';
 import type {
   IRectangle,
   IPosition,
@@ -51,10 +52,12 @@ import {
   useGridSelection,
   Record,
   DragRegionType,
+  useGridFileEvent,
 } from '@teable/sdk';
 import { GRID_DEFAULT } from '@teable/sdk/components/grid/configs';
 import { useScrollFrameRate } from '@teable/sdk/components/grid/hooks';
 import {
+  useBaseId,
   useFieldCellEditable,
   useFields,
   useIsTouchDevice,
@@ -86,6 +89,7 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { usePrevious, useClickAway } from 'react-use';
 import { ExpandRecordContainer } from '@/features/app/components/ExpandRecordContainer';
 import type { IExpandRecordContainerRef } from '@/features/app/components/ExpandRecordContainer/types';
+import { uploadFiles } from '@/features/app/utils/uploadFile';
 import { tableConfig } from '@/features/i18n/table.config';
 import { FieldOperator } from '../../../components/field-setting';
 import { useFieldSettingStore } from '../field/useFieldSettingStore';
@@ -111,6 +115,7 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
   const { groupPointsServerData, onRowExpand } = props;
   const { t } = useTranslation(tableConfig.i18nNamespaces);
   const router = useRouter();
+  const baseId = useBaseId();
   const tableId = useTableId() as string;
   const activeViewId = useViewId();
   const view = useView(activeViewId) as GridView | undefined;
@@ -176,8 +181,8 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
 
   const {
     presortRecord,
-    onSelectionChanged,
     presortRecordData,
+    onSelectionChanged,
     onPresortCellEdited,
     getPresortCellContent,
     setPresortRecordData,
@@ -194,6 +199,58 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
     getPrefillingCellContent,
     setPrefillingFieldValueMap,
   } = useGridPrefillingRow(columns);
+
+  const inPrefilling = prefillingRowIndex != null;
+
+  const onValidation = useCallback(
+    (cell: ICellItem) => {
+      if (!permission['view|update']) return false;
+
+      const [columnIndex] = cell;
+      const field = fields[columnIndex];
+
+      if (!field) return false;
+
+      const { type, isComputed } = field;
+      return type === FieldType.Attachment && !isComputed;
+    },
+    [fields, permission]
+  );
+
+  const onCellDrop = useCallback(
+    async (cell: ICellItem, files: FileList) => {
+      const attachments = await uploadFiles(files, UploadType.Table, baseId);
+
+      const [columnIndex, rowIndex] = cell;
+      const record = recordMap[rowIndex];
+      const field = fields[columnIndex];
+      const oldCellValue = (record.getCellValue(field.id) as IAttachmentCellValue) || [];
+      await record.updateCell(field.id, [...oldCellValue, ...attachments]);
+    },
+    [baseId, fields, recordMap]
+  );
+
+  const onPrefillingCellDrop = useCallback(
+    async (cell: ICellItem, files: FileList) => {
+      if (!localRecord) return;
+
+      const attachments = await uploadFiles(files, UploadType.Table, baseId);
+      const [columnIndex] = cell;
+      const field = fields[columnIndex];
+      const oldCellValue = (localRecord.getCellValue(field.id) as IAttachmentCellValue) || [];
+      setPrefillingFieldValueMap((prev) => ({
+        ...prev,
+        [field.id]: [...oldCellValue, ...attachments],
+      }));
+    },
+    [baseId, fields, localRecord, setPrefillingFieldValueMap]
+  );
+
+  useGridFileEvent({
+    gridRef: inPrefilling ? prefillingGridRef : gridRef,
+    onValidation,
+    onCellDrop: inPrefilling ? onPrefillingCellDrop : onCellDrop,
+  });
 
   const { mutate: mutateCreateRecord, isLoading: isCreatingRecord } = useMutation({
     mutationFn: (records: ICreateRecordsRo['records']) =>
@@ -215,8 +272,6 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
     setPrefillingFieldValueMap(undefined);
     setNewRecords(undefined);
   };
-
-  const inPrefilling = prefillingRowIndex != null;
 
   useEffect(() => {
     if (preTableId && preTableId !== tableId) {

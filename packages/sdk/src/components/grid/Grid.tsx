@@ -145,6 +145,8 @@ export interface IGridRef {
   scrollBy: (deltaX: number, deltaY: number) => void;
   scrollTo: (scrollLeft?: number, scrollTop?: number) => void;
   scrollToItem: (position: [columnIndex: number, rowIndex: number]) => void;
+  getCellIndicesAtPosition: (x: number, y: number) => ICellItem | null;
+  getContainer: () => HTMLDivElement | null;
 }
 
 const {
@@ -233,6 +235,18 @@ const GridBase: ForwardRefRenderFunction<IGridRef, IGridProps> = (props, forward
     scrollTo,
     scrollToItem,
     getScrollState: () => scrollState,
+    getCellIndicesAtPosition: (x: number, y: number): ICellItem | null => {
+      const { scrollLeft, scrollTop } = scrollState;
+
+      const rowIndex = coordInstance.getRowStartIndex(scrollTop + y);
+      const columnIndex = coordInstance.getColumnStartIndex(scrollLeft + x);
+
+      const { type, realIndex } = getLinearRow(rowIndex);
+      if (type !== LinearRowType.Row) return null;
+
+      return [columnIndex, realIndex];
+    },
+    getContainer: () => containerRef.current,
   }));
 
   const hasAppendRow = onRowAppend != null;
