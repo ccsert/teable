@@ -144,7 +144,7 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
   const realRowCount = rowCount ?? ssrRecords?.length ?? 0;
   const fieldEditable = useFieldCellEditable();
   const { undo, redo } = useUndoRedo();
-  const { setGridRef, searchCursor } = useGridSearchStore();
+  const { setGridRef, searchCursor, setRecordMap } = useGridSearchStore();
   const [expandRecord, setExpandRecord] = useState<{ tableId: string; recordId: string }>();
   const [newRecords, setNewRecords] = useState<ICreateRecordsRo['records']>();
   const [openAIDialog, setOpenAIDialog] = useState(false);
@@ -273,6 +273,10 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
     setPrefillingFieldValueMap(undefined);
     setNewRecords(undefined);
   };
+
+  useEffect(() => {
+    setRecordMap(recordMap);
+  }, [recordMap, setRecordMap]);
 
   useEffect(() => {
     if (preTableId && preTableId !== tableId) {
