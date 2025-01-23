@@ -46,7 +46,7 @@ export class IntelligenceTriggerListener {
 
   @OnEvent(Events.OPERATION_RECORDS_CREATE, { async: true })
   async recordCreateListener(payload: ICreateRecordsPayload) {
-    await this.intelligenceService.triggerIntelligenceCreateRecords(payload);
+    await this.intelligenceService.triggerIntelligenceCreateRecords(payload, true);
   }
 
   @OnEvent(Events.TABLE_RECORD_UPDATE, { async: true })
