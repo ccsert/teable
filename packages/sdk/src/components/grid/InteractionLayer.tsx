@@ -401,6 +401,8 @@ export const InteractionLayerBase: ForwardRefRenderFunction<
     const mouseState = getMouseState();
     onSelectionClick(event, mouseState);
     const { type, rowIndex: hoverRowIndex, columnIndex } = mouseState;
+    const { type: clickRegionType, ...rest } = hoveredRegionRef.current;
+
     if (regionType !== type) return;
 
     const { realIndex: rowIndex } = getLinearRow(hoverRowIndex);
@@ -478,6 +480,7 @@ export const InteractionLayerBase: ForwardRefRenderFunction<
             }
           );
         }
+        onItemClick?.(clickRegionType, rest, [columnIndex, rowIndex]);
         return;
       }
       case RegionType.RowGroupHeader: {
@@ -499,11 +502,8 @@ export const InteractionLayerBase: ForwardRefRenderFunction<
       }
       case RegionType.ColumnIntelligence: {
         const column = columns[columnIndex];
-        console.log(column, onColumnIntelligenceClick);
 
         if (column?.intelligence && onColumnIntelligenceClick) {
-          console.log(column);
-
           return onColumnIntelligenceClick(columnIndex, {
             x: coordInstance.getColumnRelativeOffset(columnIndex, scrollLeft),
             y: 0,
@@ -515,7 +515,6 @@ export const InteractionLayerBase: ForwardRefRenderFunction<
       }
     }
 
-    const { type: clickRegionType, ...rest } = hoveredRegionRef.current;
     onItemClick?.(clickRegionType, rest, [columnIndex, rowIndex]);
   };
 

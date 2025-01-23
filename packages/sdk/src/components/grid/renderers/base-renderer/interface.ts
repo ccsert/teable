@@ -127,3 +127,12 @@ export interface IAvatarProps extends IRectangle {
   textColor?: string;
   fontFamily: string;
 }
+
+export interface IRetryButtonProps {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  visible: boolean;
+  onClick?: () => void;
+}

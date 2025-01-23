@@ -9,7 +9,7 @@ import {
   stringifyClipboardText,
 } from '@teable/core';
 import type { ICreateRecordsRo, IGroupPointsVo, IUpdateOrderRo } from '@teable/openapi';
-import { createRecords, intelligenceGenerateBatch, UploadType } from '@teable/openapi';
+import { createRecords, UploadType, aiGenerateStream } from '@teable/openapi';
 import type {
   IRectangle,
   IPosition,
@@ -94,6 +94,7 @@ import { tableConfig } from '@/features/i18n/table.config';
 import { FieldOperator } from '../../../components/field-setting';
 import { useFieldSettingStore } from '../field/useFieldSettingStore';
 import { PrefillingRowContainer, PresortRowContainer } from './components';
+import AIButton from './components/AIButton';
 import type { IConfirmNewRecordsRef } from './components/ConfirmNewRecords';
 import { ConfirmNewRecords } from './components/ConfirmNewRecords';
 import { GIRD_ROW_HEIGHT_DEFINITIONS } from './const';
@@ -644,6 +645,10 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
     });
   };
 
+  const onGridScrollChanged = useCallback((sl?: number, _st?: number) => {
+    prefillingGridRef.current?.scrollTo(sl, undefined);
+  }, []);
+
   const collaborators = useCollaborate(selection, getCellContent);
 
   const groupedCollaborators = useMemo(() => {
@@ -671,9 +676,62 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
     );
   };
 
+  // 添加状态来跟踪活动单元格的位置
+  const [activeCellPosition, setActiveCellPosition] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    columnIndex: number;
+    rowIndex: number;
+  } | null>(null);
+
+  const [streamContent, setStreamContent] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const abortController = useRef<AbortController | null>(null);
+
+  const calculateButtonPosition = (
+    bounds: IRectangle,
+    containerRect: DOMRect,
+    scrollLeft: number,
+    scrollTop: number
+  ) => {
+    // 计算单元格在视口中的位置（考虑滚动偏移）
+    const cellXInViewport = bounds.x - scrollLeft;
+    const cellYInViewport = bounds.y - scrollTop;
+    return {
+      x: containerRect.left + cellXInViewport + bounds.width + 4, // 按钮在单元格右侧
+      y: containerRect.top + cellYInViewport + (bounds.height - 16) / 2, // 垂直居中
+    };
+  };
+
   const onItemClick = (type: RegionType, bounds: IRectangle, cellItem: ICellItem) => {
-    const [columnIndex] = cellItem;
-    const { id: fieldId } = columns[columnIndex] ?? {};
+    const [columnIndex, rowIndex] = cellItem;
+    const { id: fieldId, intelligence } = columns[columnIndex] ?? {};
+    if (intelligence && (type === RegionType.Cell || type === RegionType.ActiveCell)) {
+      setStreamContent('');
+      setIsGenerating(false);
+
+      setActiveCellPosition({
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        columnIndex,
+        rowIndex,
+      });
+
+      if (containerRef.current) {
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const scrollLeft = containerRef.current.scrollLeft || 0;
+        const scrollTop = containerRef.current.scrollTop || 0;
+
+        setButtonPosition(calculateButtonPosition(bounds, containerRect, scrollLeft, scrollTop));
+      }
+    } else {
+      setActiveCellPosition(null);
+      setButtonPosition(null);
+    }
 
     if (type === RegionType.ColumnDescription) {
       openSetting({ fieldId, operator: FieldOperator.Edit });
@@ -685,7 +743,6 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
   const onItemHovered = (type: RegionType, bounds: IRectangle, cellItem: ICellItem) => {
     const [columnIndex] = cellItem;
     const { description } = columns[columnIndex] ?? {};
-
     closeTooltip();
 
     if (type === RegionType.ColumnDescription && description) {
@@ -782,9 +839,7 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
     [permission]
   );
 
-  const onGridScrollChanged = useCallback((sl?: number, _st?: number) => {
-    prefillingGridRef.current?.scrollTo(sl, undefined);
-  }, []);
+  const [buttonPosition, setButtonPosition] = useState<{ x: number; y: number } | null>(null);
 
   const onPrefillingGridScrollChanged = useCallback((sl?: number, _st?: number) => {
     gridRef.current?.scrollTo(sl, undefined);
@@ -862,32 +917,144 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
   );
 
   const handleConfirmAI = async () => {
-    if (!currentColumn || !tableId) return;
+    if (!activeCellPosition || !streamContent) return;
 
     try {
-      const column = originalColumns[currentColumn.index];
-      console.log(column.intelligence, 'column.intelligence');
-      const res = await intelligenceGenerateBatch({
-        tableId: tableId,
-        fieldId: currentColumn.id,
-        options: column.intelligence!,
+      // 获取当前单元格信息
+      const { columnIndex, rowIndex } = activeCellPosition;
+      const recordId = recordMap[rowIndex]?.id;
+      const fieldId = columns[columnIndex]?.id;
+
+      if (!recordId || !fieldId) return;
+      // 使用 onCellEdited 更新单元格内容
+      await onCellEdited?.([columnIndex, rowIndex], {
+        type: CellType.Text,
+        data: streamContent,
+        displayData: streamContent,
       });
 
+      // 清理状态
+      setStreamContent('');
+      setIsGenerating(false);
+
       toast({
-        title: 'Success',
-        description: res.data.message,
+        title: '更新成功',
+        description: '内容已填写到单元格',
       });
     } catch (error) {
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to generate AI content',
+        title: '更新失败',
+        description: '请稍后重试',
       });
-    } finally {
-      setOpenAIDialog(false);
-      setCurrentColumn(null);
     }
   };
+
+  const handleAIGenerate = async (columnIndex: number) => {
+    if (!activeCellPosition) return;
+
+    // 如果已经在生成中，取消当前请求
+    if (isGenerating && abortController.current) {
+      abortController.current.abort();
+      abortController.current = null;
+      setIsGenerating(false);
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+      setStreamContent('');
+
+      // 创建新的 AbortController
+      abortController.current = new AbortController();
+
+      const currentRow = recordMap[activeCellPosition.rowIndex];
+      const currentRowData = currentRow?.fields;
+      const currentColumn = columns[activeCellPosition.columnIndex];
+      const prompt = currentColumn?.intelligence?.prompt;
+
+      if (!prompt || !currentRowData) return;
+
+      const filledPrompt = prompt.replace(/\{([^}]+)\}/g, (match, fieldId) =>
+        String(currentRowData[fieldId] ?? match)
+      );
+
+      const response = await aiGenerateStream(
+        {
+          prompt: filledPrompt,
+          baseId: baseId as string,
+        },
+        abortController.current.signal
+      ); // 传入 signal
+
+      const reader = response.body?.getReader();
+      if (!reader) return;
+
+      let reading = true;
+      while (reading) {
+        const { done, value } = await reader.read();
+        if (done) {
+          reading = false;
+          break;
+        }
+        const text = new TextDecoder().decode(value);
+        setStreamContent((prev) => prev + text);
+      }
+    } catch (error) {
+      // 如果是用户主动取消，不显示错误提示
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return;
+      }
+
+      toast({
+        variant: 'destructive',
+        title: '生成失败',
+        description: '请稍后重试',
+      });
+    } finally {
+      setIsGenerating(false);
+      abortController.current = null;
+    }
+  };
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      if (abortController.current) {
+        abortController.current.abort();
+      }
+    };
+  }, []);
+
+  const handleCellPositionChange = useCallback(
+    (
+      cellInfo: {
+        columnIndex: number;
+        rowIndex: number;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      } | null
+    ) => {
+      if (cellInfo && activeCellPosition) {
+        console.log(cellInfo, activeCellPosition);
+        // 判断是不是智能字段
+        // if (!activeCellPosition) {
+        //   setButtonPosition(null);
+        //   return;
+        // }
+        const gridBounds = gridRef.current?.getContainer()?.getBoundingClientRect();
+        if (gridBounds) {
+          setButtonPosition({
+            x: gridBounds.left + cellInfo.x + cellInfo.width + 4,
+            y: gridBounds.top + cellInfo.y + (cellInfo.height - 16) / 2,
+          });
+        }
+      }
+    },
+    [activeCellPosition]
+  );
 
   return (
     <div ref={containerRef} className="relative size-full">
@@ -939,9 +1106,9 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
         onPaste={onPaste}
         onItemClick={onItemClick}
         onItemHovered={onItemHovered}
-        onColumnIntelligenceClick={handleIntelligenceClick}
+        onColumnIntelligenceClick={getAuthorizedFunction(handleIntelligenceClick, 'record|update')}
+        onCellPositionChange={handleCellPositionChange}
       />
-
       <Dialog open={openAIDialog} onOpenChange={setOpenAIDialog}>
         <DialogContent>
           <DialogHeader>
@@ -1048,6 +1215,29 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
         }}
         onConfirm={() => newRecords && mutateCreateRecord(newRecords)}
       />
+      {/* 添加 AI 按钮 */}
+      {activeCellPosition && buttonPosition && (
+        <AIButton
+          x={buttonPosition.x}
+          y={buttonPosition.y}
+          onClick={() => handleAIGenerate(activeCellPosition.columnIndex)}
+          loading={isGenerating}
+          streamContent={streamContent}
+          onAccept={handleConfirmAI}
+          onCancel={() => {
+            if (abortController.current) {
+              abortController.current.abort();
+            }
+            setStreamContent('');
+            setIsGenerating(false);
+          }}
+          columnIndex={activeCellPosition.columnIndex}
+          rowIndex={activeCellPosition.rowIndex}
+          currentColumnIndex={activeCellPosition.columnIndex}
+          currentRowIndex={activeCellPosition.rowIndex}
+          containerRef={containerRef}
+        />
+      )}
     </div>
   );
 };

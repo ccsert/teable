@@ -120,6 +120,15 @@ export interface IGridExternalProps {
   onItemClick?: (type: RegionType, bounds: IRectangle, cellItem: ICellItem) => void;
 
   onColumnIntelligenceClick?: (columnIndex: number, bounds: IRectangle) => void;
+
+  onCellPositionChange?: (cellInfo: {
+    columnIndex: number;
+    rowIndex: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => void;
 }
 
 export interface IGridProps extends IGridExternalProps {
@@ -217,6 +226,7 @@ const GridBase: ForwardRefRenderFunction<IGridRef, IGridProps> = (props, forward
     onItemClick,
     onScrollChanged,
     onColumnIntelligenceClick,
+    onCellPositionChange,
   } = props;
 
   useImperativeHandle(forwardRef, () => ({
@@ -668,7 +678,22 @@ const GridBase: ForwardRefRenderFunction<IGridRef, IGridProps> = (props, forward
         scrollEnable={scrollEnable}
         getLinearRow={getLinearRow}
         setScrollState={setScrollState}
-        onScrollChanged={onScrollChanged}
+        onScrollChanged={(left: number, top: number) => {
+          onScrollChanged?.(left, top);
+          if (activeCell) {
+            const [columnIndex, rowIndex] = activeCell;
+            const x = coordInstance.getColumnRelativeOffset(columnIndex, left);
+            const y = coordInstance.getRowOffset(rowIndex) - top;
+            onCellPositionChange?.({
+              columnIndex,
+              rowIndex,
+              x,
+              y,
+              width: coordInstance.getColumnWidth(columnIndex),
+              height: coordInstance.getRowHeight(rowIndex),
+            });
+          }
+        }}
         onVisibleRegionChanged={onVisibleRegionChanged}
       />
     </div>

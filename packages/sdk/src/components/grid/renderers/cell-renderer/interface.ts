@@ -163,7 +163,12 @@ export type IInnerCell =
   | IChartCell
   | IUserCell;
 
-export type ICell = IInnerCell | ILoadingCell;
+export interface IRetryCell {
+  needRetry: boolean;
+  retryAction?: (rowIndex: number, columnIndex: number) => void;
+}
+
+export type ICell = (IInnerCell | ILoadingCell) & IRetryCell;
 
 export type ICellRenderProps = {
   ctx: CanvasRenderingContext2D;
