@@ -1042,12 +1042,6 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
       } | null
     ) => {
       if (cellInfo && activeCellPosition) {
-        console.log(cellInfo, activeCellPosition);
-        // 判断是不是智能字段
-        // if (!activeCellPosition) {
-        //   setButtonPosition(null);
-        //   return;
-        // }
         const gridBounds = gridRef.current?.getContainer()?.getBoundingClientRect();
         if (gridBounds) {
           setButtonPosition({
