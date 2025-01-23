@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { type IIntelligenceOptions } from '@teable/core';
 import { PrismaService } from '@teable/db-main-prisma';
-import { generateText } from 'ai';
+import { generateText, streamText } from 'ai';
 import { Knex } from 'knex';
 import { InjectModel } from 'nest-knexjs';
 import { IThresholdConfig, ThresholdConfig } from '../../configs/threshold.config';
@@ -63,7 +63,14 @@ export class IntelligenceService {
   ) {}
 
   async generateStream(prompt: string) {
-    throw new Error('Method not implemented.');
+    const aiConfig = await this.aiService.getAIConfig();
+    const currentTaskModel = TASK_MODEL_MAP.coding;
+    const modelKey = aiConfig[currentTaskModel as keyof typeof aiConfig] as string;
+    const modelInstance = await this.aiService.getModelInstance(modelKey, aiConfig.llmProviders);
+    return await streamText({
+      model: modelInstance,
+      prompt: prompt,
+    });
   }
   async generateBatch(tableId: string, fieldId: string, intelligenceOptions: IIntelligenceOptions) {
     // 立即返回，表示任务已开始

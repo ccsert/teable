@@ -1,8 +1,9 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Res } from '@nestjs/common';
 import type { IIntelligenceOptions } from '@teable/core';
-import { IntelligenceService } from './intelligence.service';
+import { Response } from 'express';
 import { ClsService } from 'nestjs-cls';
 import type { IClsStore } from '../../types/cls';
+import { IntelligenceService } from './intelligence.service';
 
 @Controller('api/intelligence')
 export class IntelligenceController {
@@ -12,8 +13,9 @@ export class IntelligenceController {
   ) {}
 
   @Post('/generate-stream')
-  async generateStream(@Body() body: { prompt: string }) {
-    return this.intelligenceService.generateStream(body.prompt);
+  async generateStream(@Body() body: { prompt: string }, @Res() res: Response) {
+    const result = await this.intelligenceService.generateStream(body.prompt);
+    result.pipeTextStreamToResponse(res);
   }
 
   @Post('/generate-batch')
