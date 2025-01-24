@@ -9,7 +9,12 @@ import {
   stringifyClipboardText,
 } from '@teable/core';
 import type { ICreateRecordsRo, IGroupPointsVo, IUpdateOrderRo } from '@teable/openapi';
-import { createRecords, UploadType, aiGenerateStream } from '@teable/openapi';
+import {
+  createRecords,
+  UploadType,
+  aiGenerateStream,
+  intelligenceGenerateBatch,
+} from '@teable/openapi';
 import type {
   IRectangle,
   IPosition,
@@ -954,6 +959,33 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
     }
   };
 
+  const handleIntelligenceGenerate = async () => {
+    if (!currentColumn || !tableId) return;
+
+    try {
+      const column = originalColumns[currentColumn.index];
+      const res = await intelligenceGenerateBatch({
+        tableId: tableId,
+        fieldId: currentColumn.id,
+        options: column.intelligence!,
+      });
+
+      toast({
+        title: 'Success',
+        description: res.data.message,
+      });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to generate AI content',
+      });
+    } finally {
+      setOpenAIDialog(false);
+      setCurrentColumn(null);
+    }
+  };
+
   const handleAIGenerate = async (columnIndex: number) => {
     if (!activeCellPosition) return;
 
@@ -1117,7 +1149,7 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
             <Button variant="outline" onClick={() => setOpenAIDialog(false)}>
               取消
             </Button>
-            <Button onClick={handleConfirmAI}>确定</Button>
+            <Button onClick={handleIntelligenceGenerate}>确定</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
