@@ -4,9 +4,11 @@ import { EditorState, StateField, StateEffect, RangeSet } from '@codemirror/stat
 import type { DecorationSet } from '@codemirror/view';
 import { EditorView, keymap, Decoration, WidgetType } from '@codemirror/view';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, Button } from '@teable/ui-lib';
-import { Maximize2 } from 'lucide-react';
+import { Maximize2, MoreHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EditorExtensions } from './EditorExtensions';
 import { FieldSelector } from './FieldSelector';
+import { PromptOptimizer } from './PromptOptimizer';
 
 interface ICodeMirrorEditorProps {
   value: string;
@@ -396,6 +398,12 @@ const PureEditor = ({
             position: absolute;
             padding: 12px 16px;
             font-size: 14px;
+            height: 36px;
+            line-height: 36px;
+            max-width: calc(100% - 140px); /* 为右侧按钮预留空间 */
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
           }
           .cm-editor {
             height: 100%;
@@ -411,6 +419,7 @@ const PureEditor = ({
           }
           .cm-content {
             line-height: 1.6;
+            padding-top: 12px !important;
           }
           .cm-line {
             display: flex;
@@ -446,6 +455,9 @@ export const CodeMirrorEditor = (
     fields?: { id: string; name: string }[];
     enableFieldSelector?: boolean;
     currentFieldId?: string;
+    disablePromptOptimizer?: boolean;
+    label?: string;
+    hideHeader?: boolean;
   }
 ) => {
   const [showDialog, setShowDialog] = useState(false);
@@ -455,7 +467,6 @@ export const CodeMirrorEditor = (
   const handleFieldInsert = useCallback(
     (field: { id: string; name: string }) => {
       const fieldMark = `{${field.id}}`;
-      // 根据当前上下文选择正确的编辑器引用
       const view = showDialog ? dialogEditorViewRef.current : mainEditorViewRef.current;
 
       if (view) {
@@ -465,36 +476,40 @@ export const CodeMirrorEditor = (
           selection: { anchor: from + fieldMark.length },
         });
         view.focus();
-      } else {
-        props.onChange(props.value + fieldMark);
       }
     },
-    [props.onChange, showDialog]
+    [showDialog]
   );
 
   return (
     <>
-      <div className={`group relative ${props.className || ''}`}>
-        <PureEditor {...props} editorViewRef={mainEditorViewRef} maxHeight="300px" />
-        {!props.isFullscreen && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
-            onClick={() => setShowDialog(true)}
-          >
-            <Maximize2 className="size-4" />
-          </Button>
+      <div
+        className={`group flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm focus-within:border-primary hover:border-gray-400 ${
+          props.className || ''
+        }`}
+      >
+        {props.label && (
+          <div className="flex h-9 items-center justify-between border-b border-gray-100 bg-gray-50/50 px-3">
+            <div className="flex items-center">
+              <div className="text-sm font-medium text-gray-700">{props.label}</div>
+            </div>
+            <EditorExtensions
+              {...props}
+              onFullscreen={() => setShowDialog(true)}
+              onFieldSelect={handleFieldInsert}
+            />
+          </div>
         )}
+        <div className="flex-1">
+          <PureEditor {...props} editorViewRef={mainEditorViewRef} maxHeight="300px" />
+        </div>
       </div>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="flex max-w-[80vw] flex-col">
           <DialogHeader className="flex-none flex-row items-center justify-between">
             <DialogTitle>编辑提示词</DialogTitle>
-            {props.enableFieldSelector && (
-              <FieldSelector currentFieldId={props.currentFieldId} onSelect={handleFieldInsert} />
-            )}
+            <EditorExtensions {...props} isFullscreen={true} onFieldSelect={handleFieldInsert} />
           </DialogHeader>
           <div className="min-h-0 flex-1">
             <PureEditor

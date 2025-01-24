@@ -33,27 +33,8 @@ export const FieldEditor = ({
     [onUpdate]
   );
 
-  const insertField = useCallback(
-    (field: { id: string; name: string }) => {
-      const fieldMark = `{${field.id}}`;
-      const newValue = value + fieldMark;
-      handleChange(newValue);
-    },
-    [value, handleChange]
-  );
-
   return (
-    <div className="flex w-full flex-col gap-4">
-      <div className="flex items-center justify-between">
-        {label && (
-          <Label htmlFor={`field-editor-${label}`} className="font-normal">
-            {label}
-          </Label>
-        )}
-        {enableFieldSelector && (
-          <FieldSelector currentFieldId={currentFieldId} onSelect={insertField} />
-        )}
-      </div>
+    <div className="w-full">
       <CodeMirrorEditor
         value={value}
         onChange={handleChange}
@@ -62,6 +43,7 @@ export const FieldEditor = ({
         fields={fields}
         enableFieldSelector={enableFieldSelector}
         currentFieldId={currentFieldId}
+        label={label}
       />
     </div>
   );
