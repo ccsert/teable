@@ -1,14 +1,11 @@
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
-import { EditorState, StateField, StateEffect, RangeSet } from '@codemirror/state';
+import { EditorState, StateField, StateEffect } from '@codemirror/state';
 import type { DecorationSet } from '@codemirror/view';
 import { EditorView, keymap, Decoration, WidgetType } from '@codemirror/view';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, Button } from '@teable/ui-lib';
-import { Maximize2, MoreHorizontal } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@teable/ui-lib';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorExtensions } from './EditorExtensions';
-import { FieldSelector } from './FieldSelector';
-import { PromptOptimizer } from './PromptOptimizer';
 
 interface ICodeMirrorEditorProps {
   value: string;
@@ -17,9 +14,6 @@ interface ICodeMirrorEditorProps {
   className?: string;
   height?: string;
 }
-
-// 添加字段标记的装饰效果
-const fieldMark = Decoration.mark({ class: 'cm-field-mark' });
 
 // 添加字段装饰器类
 class FieldWidget extends WidgetType {

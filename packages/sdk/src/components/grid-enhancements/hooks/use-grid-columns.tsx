@@ -140,7 +140,7 @@ const useGenerateColumns = () => {
             groupFieldIds,
             filterFieldIds,
           });
-          const intelligence = options?.intelligence as IIntelligenceOptions;
+          const intelligence = (options as { intelligence?: IIntelligenceOptions })?.intelligence;
           return {
             id,
             name: notNull ? `${name} *` : name,

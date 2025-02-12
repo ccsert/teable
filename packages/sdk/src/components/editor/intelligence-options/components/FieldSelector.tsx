@@ -12,7 +12,7 @@ import { useFields, useFieldStaticGetter } from '../../../../hooks';
 
 interface IFieldSelectorProps {
   currentFieldId?: string;
-  onSelect: (field: { id: string; name: string }) => void;
+  onSelect?: (field: { id: string; name: string }) => void;
 }
 
 export const FieldSelector = ({ currentFieldId, onSelect }: IFieldSelectorProps) => {
@@ -58,7 +58,7 @@ export const FieldSelector = ({ currentFieldId, onSelect }: IFieldSelectorProps)
                   key={field.id}
                   className="flex items-center gap-2 px-2 py-1.5 text-xs"
                   onSelect={() => {
-                    onSelect(field);
+                    onSelect?.(field);
                     setOpen(false);
                     setSearch('');
                   }}

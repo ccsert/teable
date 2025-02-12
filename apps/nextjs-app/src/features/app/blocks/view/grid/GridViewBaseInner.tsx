@@ -1245,6 +1245,7 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
         }}
         onConfirm={() => newRecords && mutateCreateRecord(newRecords)}
       />
+      {/* todo 此处可以补充更多的浮动菜单，且浮动菜单由前端实现一些ai功能 */}
       {/* 添加 AI 按钮 */}
       {activeCellPosition && buttonPosition && (
         <AIButton

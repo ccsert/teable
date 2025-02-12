@@ -33,6 +33,7 @@ export interface IBaseCell {
   contentAlign?: 'left' | 'right' | 'center';
   lastUpdated?: string;
   customTheme?: Partial<IGridTheme>;
+  needRetry?: boolean;
 }
 
 export interface IEditableCell extends IBaseCell {
@@ -164,7 +165,7 @@ export type IInnerCell =
   | IUserCell;
 
 export interface IRetryCell {
-  needRetry: boolean;
+  needRetry?: boolean;
   retryAction?: (rowIndex: number, columnIndex: number) => void;
 }
 
