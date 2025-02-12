@@ -36,7 +36,8 @@ const AIButton = ({
 
   return (
     <div
-      className="fixed z-[9999] flex cursor-pointer items-center justify-center"
+      className="fixed z-50 flex cursor-pointer items-center justify-center"
+      // eslint-disable-next-line react/forbid-component-props
       style={{
         left: `${x}px`,
         top: `${y}px`,
@@ -77,6 +78,7 @@ const AIButton = ({
                   e.stopPropagation();
                   onAccept?.();
                 }}
+                disabled={loading}
               >
                 接受
               </Button>
