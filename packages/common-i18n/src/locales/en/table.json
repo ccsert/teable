@@ -502,7 +502,10 @@
     "action": {
       "rename": "Rename view",
       "duplicate": "Duplicate view",
-      "delete": "Delete view"
+      "delete": "Delete view",
+      "lock": "Lock view",
+      "unlock": "Unlock view",
+      "enable": "Enable"
     },
     "category": {
       "table": "Grid View",
@@ -519,6 +522,9 @@
     "search": {
       "field_one": "{{name}}",
       "field_other": "fields({{length}})"
+    },
+    "locked": {
+      "tip": "This view is locked. You can enable personal mode to edit view options, and the changes will only take effect for yourself."
     }
   },
   "lastModifiedTime": "Last modified time",

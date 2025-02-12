@@ -225,8 +225,6 @@ export class BatchService {
     data: { id: string; values: { [key: string]: unknown } }[]
   ) {
     const tempTableName = `temp_` + customAlphabet('abcdefghijklmnopqrstuvwxyz', 10)();
-    const prisma = this.prismaService.txClient();
-
     // 1.create temporary table structure
     const createTempTableSchema = this.knex.schema.createTable(tempTableName, (table) => {
       table.string(idFieldName).primary();
@@ -238,7 +236,6 @@ export class BatchService {
     const createTempTableSql = createTempTableSchema
       .toQuery()
       .replace('create table', 'create temporary table');
-    await prisma.$executeRawUnsafe(createTempTableSql);
 
     const { insertTempTableSql, updateRecordSql } = this.dbProvider.executeUpdateRecordsSqlList({
       dbTableName,
@@ -247,16 +244,18 @@ export class BatchService {
       dbFieldNames: schemas.map((s) => s.dbFieldName),
       data,
     });
-
-    // 2.initialize temporary table data
-    await prisma.$executeRawUnsafe(insertTempTableSql);
-
-    // 3.update data
-    await wrapWithValidationErrorHandler(() => prisma.$executeRawUnsafe(updateRecordSql));
-
-    // 4.delete temporary table
     const dropTempTableSql = this.knex.schema.dropTable(tempTableName).toQuery();
-    await prisma.$executeRawUnsafe(dropTempTableSql);
+
+    await this.prismaService.$tx(async (tx) => {
+      // temp table should in one transaction
+      await tx.$executeRawUnsafe(createTempTableSql);
+      // 2.initialize temporary table data
+      await tx.$executeRawUnsafe(insertTempTableSql);
+      // 3.update data
+      await wrapWithValidationErrorHandler(() => tx.$executeRawUnsafe(updateRecordSql));
+      // 4.delete temporary table
+      await tx.$executeRawUnsafe(dropTempTableSql);
+    });
   }
 
   private async executeUpdateRecordsInner(
