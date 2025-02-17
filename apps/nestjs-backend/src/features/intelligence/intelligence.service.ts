@@ -62,8 +62,8 @@ export class IntelligenceService {
     private readonly recordOpenApiService: RecordOpenApiService
   ) {}
 
-  async generateStream(prompt: string) {
-    const aiConfig = await this.aiService.getAIConfig();
+  async generateStream(prompt: string, baseId: string) {
+    const aiConfig = await this.aiService.getAIConfig(baseId);
     const currentTaskModel = TASK_MODEL_MAP.coding;
     const modelKey = aiConfig[currentTaskModel as keyof typeof aiConfig] as string;
     const modelInstance = await this.aiService.getModelInstance(modelKey, aiConfig.llmProviders);
@@ -247,7 +247,11 @@ export class IntelligenceService {
           // 2. 处理记录（耗时操作）
           const results = await Promise.all(
             batch.map((record) =>
-              this.processRecord(record, { fieldMap, dynamicDepends, prompt, fieldId })
+              this.processRecord(
+                record,
+                { fieldMap, dynamicDepends, prompt, fieldId },
+                config.baseId
+              )
             )
           );
 
@@ -300,7 +304,8 @@ export class IntelligenceService {
       dynamicDepends: string[];
       prompt: string;
       fieldId: string;
-    }
+    },
+    baseId: string
   ): Promise<{ recordId: string; success: boolean; result?: string }> {
     try {
       const processedPrompt = this.replacePlaceholders(record, {
@@ -309,7 +314,7 @@ export class IntelligenceService {
         prompt: config.prompt,
       });
 
-      const aiConfig = await this.aiService.getAIConfig();
+      const aiConfig = await this.aiService.getAIConfig(baseId);
       const currentTaskModel = TASK_MODEL_MAP.coding;
       const modelKey = aiConfig[currentTaskModel as keyof typeof aiConfig] as string;
       const modelInstance = await this.aiService.getModelInstance(modelKey, aiConfig.llmProviders);
@@ -552,8 +557,10 @@ export class IntelligenceService {
       //   this.logger.warn(`Missing dependencies for record ${recordId}, field ${fieldId}`);
       //   return;
       // }
+      const { baseId } = await this.getTableMetadata(tableId);
 
       const result = await this.generateFieldValue(recordData, {
+        baseId,
         fieldMap,
         intelligence: intelligence!,
       });
@@ -588,6 +595,7 @@ export class IntelligenceService {
   private async generateFieldValue(
     recordData: Record<string, unknown>,
     context: {
+      baseId: string;
       fieldMap: Record<string, string>;
       intelligence: IIntelligenceOptions;
     }
@@ -600,7 +608,7 @@ export class IntelligenceService {
       prompt: intelligence.prompt!,
     });
 
-    const config = await this.aiService.getAIConfig();
+    const config = await this.aiService.getAIConfig(context.baseId);
     const currentTaskModel = TASK_MODEL_MAP.coding;
     const modelKey = config[currentTaskModel as keyof typeof config] as string;
     const modelInstance = await this.aiService.getModelInstance(modelKey, config.llmProviders);
