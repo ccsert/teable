@@ -1016,9 +1016,9 @@ export const GridViewBaseInner: React.FC<IGridViewBaseInnerProps> = (
       );
 
       const response = await aiGenerateStream(
+        baseId!,
         {
           prompt: filledPrompt,
-          baseId: baseId as string,
         },
         abortController.current.signal
       ); // 传入 signal
