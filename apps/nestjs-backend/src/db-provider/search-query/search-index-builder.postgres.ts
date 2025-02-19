@@ -67,6 +67,8 @@ export class FieldFormatter {
 
 export class IndexBuilderPostgres extends IndexBuilderAbstract {
   static PG_MAX_INDEX_LEN = 63;
+  static DELIMITER_LEN = 3;
+
   private getIndexPrefix() {
     return `idx_trgm`;
   }
@@ -74,15 +76,27 @@ export class IndexBuilderPostgres extends IndexBuilderAbstract {
   private getIndexName(table: string, field: Pick<IFieldInstance, 'id' | 'dbFieldName'>): string {
     const { dbFieldName, id } = field;
     const prefix = this.getIndexPrefix();
-    // 3 is space character
-    const len =
+    const maxTableDbNameLen =
       IndexBuilderPostgres.PG_MAX_INDEX_LEN -
       id.length -
       this.getIndexPrefix().length -
-      table.length -
-      3;
-    const abbDbFieldName = dbFieldName.slice(0, len);
-    return `${prefix}_${table}_${abbDbFieldName}_${id}`;
+      IndexBuilderPostgres.DELIMITER_LEN;
+    const tableDbNameLen = maxTableDbNameLen < table.length ? maxTableDbNameLen : table.length;
+    // 3 is space character
+    const dbFieldNameLen =
+      maxTableDbNameLen < table.length
+        ? 0
+        : IndexBuilderPostgres.PG_MAX_INDEX_LEN -
+          id.length -
+          this.getIndexPrefix().length -
+          tableDbNameLen -
+          IndexBuilderPostgres.DELIMITER_LEN;
+    const abbDbFieldName = dbFieldName.slice(0, dbFieldNameLen);
+    return `${prefix}_${table.slice(0, tableDbNameLen)}_${abbDbFieldName}_${id}`;
+  }
+
+  private getSearchFactor() {
+    return this.getIndexPrefix();
   }
 
   createSingleIndexSql(dbTableName: string, field: IFieldInstance): string | null {
@@ -98,6 +112,7 @@ export class IndexBuilderPostgres extends IndexBuilderAbstract {
 
   getDropIndexSql(dbTableName: string): string {
     const [schema, table] = dbTableName.split('.');
+    const searchFactor = this.getSearchFactor();
     return `
       DO $$ 
       DECLARE 
@@ -108,7 +123,7 @@ export class IndexBuilderPostgres extends IndexBuilderAbstract {
           FROM pg_indexes 
           WHERE schemaname = '${schema}' 
           AND tablename = '${table}'
-          AND indexname LIKE 'idx_trgm_${table}_%'
+          AND indexname LIKE '${searchFactor}%'
         LOOP
           EXECUTE 'DROP INDEX IF EXISTS "' || '${schema}' || '"."' || _index.indexname || '"';
         END LOOP;
@@ -131,13 +146,14 @@ export class IndexBuilderPostgres extends IndexBuilderAbstract {
 
   getExistTableIndexSql(dbTableName: string): string {
     const [schema, table] = dbTableName.split('.');
+    const searchFactor = this.getSearchFactor();
     return `
       SELECT EXISTS (
         SELECT 1
         FROM pg_indexes
         WHERE schemaname = '${schema}'
         AND tablename = '${table}'
-        AND indexname LIKE 'idx_trgm_${table}%'
+        AND indexname LIKE '${searchFactor}%'
       )`;
   }
 
@@ -165,11 +181,11 @@ export class IndexBuilderPostgres extends IndexBuilderAbstract {
 
   getIndexInfoSql(dbTableName: string): string {
     const [, table] = dbTableName.split('.');
-    const prefix = this.getIndexPrefix();
+    const searchFactor = this.getSearchFactor();
     return `
     SELECT * FROM pg_indexes 
 WHERE tablename = '${table}'
-AND indexname like '%${prefix}_${table}_%'`;
+AND indexname like '${searchFactor}%'`;
   }
 
   getAbnormalIndex(dbTableName: string, fields: IFieldInstance[], existingIndex: IPgIndex[]) {
@@ -199,7 +215,7 @@ AND indexname like '%${prefix}_${table}_%'`;
       .filter(({ cellValueType }) => !unSupportCellValueType.includes(cellValueType))
       .map((f) => {
         return {
-          indexName: this.getIndexName(dbTableName, f),
+          indexName: this.getIndexName(table, f),
           indexDef: this.createSingleIndexSql(dbTableName, f) as string,
         };
       });
