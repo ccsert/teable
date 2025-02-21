@@ -15,7 +15,6 @@ export const TableRelationConfig = ({
   onToggle,
   onUpdate,
   onRemove,
-  availableFields,
   direction,
   form,
 }: ITableRelationConfigProps) => {

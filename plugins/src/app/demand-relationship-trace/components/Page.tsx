@@ -1,8 +1,8 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { ThemeProvider } from '@teable/next-themes';
-import { getViewInstallPlugin } from '@teable/openapi';
+import { getViewInstallPlugin, updateViewPluginStorage } from '@teable/openapi';
 import type { IUIConfig } from '@teable/sdk';
 import {
   AnchorContext,
@@ -15,7 +15,7 @@ import {
 import { Spin } from '@teable/ui-lib';
 import { Button, Sheet, SheetContent, SheetTrigger } from '@teable/ui-lib/dist/shadcn';
 import { Settings2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEnv } from '../../../hooks/useEnv';
 import { useInitializationZodI18n } from '../../../hooks/useInitializationZodI18n';
@@ -56,16 +56,43 @@ export const Pages = (props: IPageProps) => {
 
 const Container = (props: IPageProps & { uiConfig?: IUIConfig }) => {
   const { i18n, t } = useTranslation();
-  const pluginBridge = usePluginBridge();
   const { tableId, positionId: viewId } = useEnv();
+  const pluginBridge = usePluginBridge();
 
-  console.log(tableId, viewId);
-
+  // 获取插件配置
   const { data: pluginInstall, isLoading } = useQuery({
     queryKey: ['plugin-install'],
     queryFn: () => getViewInstallPlugin(tableId!, viewId!).then((res) => res.data),
     enabled: Boolean(tableId && viewId),
   });
+  const { mutateAsync: updateStorageFn } = useMutation({
+    mutationFn: ({
+      tableId,
+      viewId,
+      pluginInstallId,
+      storage,
+    }: {
+      tableId: string;
+      viewId: string;
+      pluginInstallId: string;
+      storage: Record<string, unknown>;
+    }) => updateViewPluginStorage(tableId, viewId, pluginInstallId, storage),
+  });
+
+  const updateConfig = useCallback(
+    async (config: IConfig) => {
+      if (!tableId || !viewId || !pluginInstall?.pluginInstallId) return;
+      await updateStorageFn({
+        tableId,
+        viewId,
+        pluginInstallId: pluginInstall.pluginInstallId,
+        storage: {
+          ...config,
+        },
+      });
+    },
+    [tableId, viewId, pluginInstall?.pluginInstallId, updateStorageFn]
+  );
 
   const [config, setConfig] = useState<IConfig>({
     isGrouped: false,
@@ -73,12 +100,37 @@ const Container = (props: IPageProps & { uiConfig?: IUIConfig }) => {
     analysisMode: 'intelligent',
     relations: [],
   });
-  const [isSettingsOpen, setIsSettingsOpen] = useState(!config.isConfigured);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  const handleStartAnalysis = () => {
-    if (config.validate?.()) {
-      setConfig((prev) => ({ ...prev, isConfigured: true }));
-      setIsSettingsOpen(false);
+  // 初始化配置
+  useEffect(() => {
+    if (pluginInstall?.storage) {
+      const storageConfig = pluginInstall.storage as unknown as IConfig;
+      setConfig(storageConfig);
+
+      // 如果没有配置过，打开设置面板
+      if (!storageConfig.isConfigured) {
+        setIsSettingsOpen(true);
+      }
+    }
+  }, [pluginInstall]);
+
+  const handleConfigChange = async (newConfig: Partial<IConfig>) => {
+    const updatedConfig = {
+      ...config,
+      ...newConfig,
+    };
+
+    try {
+      await updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+
+      // 如果配置已完成，关闭设置面板
+      if (updatedConfig.isConfigured) {
+        setIsSettingsOpen(false);
+      }
+    } catch (error) {
+      console.error('Failed to update config:', error);
     }
   };
 
@@ -139,18 +191,7 @@ const Container = (props: IPageProps & { uiConfig?: IUIConfig }) => {
                       <SheetContent>
                         <div className="space-y-6">
                           <h3 className="text-lg font-medium">{t('settings')}</h3>
-
-                          <ConfigForm
-                            config={config}
-                            onConfigChange={(newConfig) => {
-                              console.log(newConfig);
-                              setConfig((prev) => ({
-                                ...prev,
-                                ...newConfig,
-                                relations: newConfig.relations || prev.relations,
-                              }));
-                            }}
-                          />
+                          <ConfigForm config={config} onConfigChange={handleConfigChange} />
                         </div>
                       </SheetContent>
                     </Sheet>

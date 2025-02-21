@@ -91,10 +91,11 @@ export const ConfigForm = ({ config, onConfigChange }: IConfigFormProps) => {
     return Array.from(tableMap.values());
   }, [outputFields]);
 
-  const onSubmit = (values: FormValues) => {
+  const onSubmit = async (values: FormValues) => {
     try {
-      onConfigChange({
+      await onConfigChange({
         ...values,
+        isConfigured: true,
       });
     } catch (error) {
       console.error('Form submission error:', error);
@@ -187,7 +188,7 @@ export const ConfigForm = ({ config, onConfigChange }: IConfigFormProps) => {
           />
         )}
 
-        <Button type="submit" disabled={!form.formState.isValid}>
+        <Button type="submit" disabled={!form.formState.isValid || form.formState.isSubmitting}>
           {t('startAnalysis')}
         </Button>
 

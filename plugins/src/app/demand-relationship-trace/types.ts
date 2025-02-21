@@ -27,14 +27,6 @@ export interface IConfig {
 }
 
 export interface IConfigFormProps {
-  config: {
-    analysisMode: 'intelligent' | 'static';
-    promptText?: string;
-    relations: ITableRelation[];
-  };
-  onConfigChange: (config: {
-    analysisMode: 'intelligent' | 'static';
-    promptText?: string;
-    relations: ITableRelation[];
-  }) => void;
+  config: IConfig;
+  onConfigChange: (config: IConfig) => void;
 }

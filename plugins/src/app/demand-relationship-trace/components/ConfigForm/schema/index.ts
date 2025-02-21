@@ -70,4 +70,13 @@ export const createFormSchema = ({ tables }: ICreateFormSchemaProps = {}) => {
   });
 };
 
-export type FormValues = z.infer<ReturnType<typeof createFormSchema>>;
+export const formSchema = z.object({
+  analysisMode: z.enum(['intelligent', 'static']),
+  promptText: z.string().optional(),
+  relations: z.array(tableRelationSchema),
+  // ... 其他验证保持不变
+});
+
+export type FormValues = z.infer<ReturnType<typeof createFormSchema>> & {
+  isConfigured?: boolean;
+};
