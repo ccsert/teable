@@ -14,6 +14,7 @@ import { InjectStorageAdapter } from '../../attachments/plugins/storage';
 import { UserService } from '../../user/user.service';
 import { generateSecret } from '../utils';
 import { chartConfig } from './config/chart';
+import { demandRelationshipTraceConfig } from './config/demand-relationship-trace';
 import { sheetFormConfig } from './config/sheet-form-view';
 import type { IOfficialPluginConfig } from './config/types';
 
@@ -44,6 +45,13 @@ export class OfficialPluginInitService implements OnModuleInit {
           this.configService.get<string>('PLUGIN_SHEETFORMVIEW_SECRET') ||
           this.baseConfig.secretKey,
         url: `${this.baseConfig.publicOrigin}/plugin/sheet-form-view`,
+      },
+      {
+        ...demandRelationshipTraceConfig,
+        secret:
+          this.configService.get<string>('PLUGIN_DEMANDRELATIONSHIPTRACE_SECRET') ||
+          '$2b$10$66NypbeNQPM/HeYt921HRucTR5g5LnqxFNp9R5UVSygTxmeJNEf1K',
+        url: `${this.baseConfig.publicOrigin}/plugin/demand-relationship-trace`,
       },
     ];
 
