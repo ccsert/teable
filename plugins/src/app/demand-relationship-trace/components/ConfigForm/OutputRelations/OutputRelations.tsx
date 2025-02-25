@@ -14,6 +14,7 @@ export const OutputRelations: React.FC<IOutputRelationsProps> = ({
   sharedDisplayFields,
   updateSharedDisplayFields,
   clearSharedDisplayFields,
+  thisTableFields,
 }) => {
   const { t } = useTranslation();
 
@@ -29,6 +30,8 @@ export const OutputRelations: React.FC<IOutputRelationsProps> = ({
           <TableRelationConfig
             key={outputTableId}
             baseId={baseId}
+            isAuto={true}
+            thisTableFields={thisTableFields}
             table={{
               tableId: outputTableId,
               fieldId: existingRelation?.fieldId || fields[0].id,

@@ -30,6 +30,8 @@ export const TableConfigDialog = ({
   table,
   onUpdate,
   originalTableId,
+  isAuto,
+  thisTableFields,
 }: ITableConfigDialogProps) => {
   const { t } = useTranslation();
   const [selectedFields, setSelectedFields] = useState(table.displayFields || []);
@@ -47,10 +49,14 @@ export const TableConfigDialog = ({
 
   const linkFields = useMemo(
     () =>
-      fields
-        ?.filter((field): field is LinkField => field instanceof LinkField)
-        .filter((field) => field.options.foreignTableId === originalTableId) || [],
-    [fields, originalTableId]
+      isAuto
+        ? thisTableFields
+            ?.filter((field): field is LinkField => field instanceof LinkField)
+            .filter((field) => field.options.foreignTableId === table.tableId) || []
+        : fields
+            ?.filter((field): field is LinkField => field instanceof LinkField)
+            .filter((field) => field.options.foreignTableId === originalTableId) || [],
+    [isAuto, thisTableFields, fields, table.tableId, originalTableId]
   );
 
   const otherFields = useMemo(

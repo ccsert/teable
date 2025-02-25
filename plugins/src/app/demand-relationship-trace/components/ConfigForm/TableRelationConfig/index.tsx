@@ -17,6 +17,8 @@ export const TableRelationConfig = ({
   onRemove,
   direction,
   form,
+  isAuto,
+  thisTableFields,
 }: ITableRelationConfigProps) => {
   const { t } = useTranslation();
   const tables = useTables();
@@ -52,6 +54,8 @@ export const TableRelationConfig = ({
                 table={table}
                 onUpdate={onUpdate}
                 originalTableId={originalTableId}
+                isAuto={isAuto}
+                thisTableFields={thisTableFields}
               />
             </StandaloneViewProvider>
           </TableProvider>

@@ -13,4 +13,5 @@ export interface IOutputRelationsProps {
   sharedDisplayFields: Record<string, IFieldInfo[]>;
   updateSharedDisplayFields: (tableId: string, fields: IFieldInfo[]) => void;
   clearSharedDisplayFields: (tableId: string) => void;
+  thisTableFields: IFieldInfo[];
 }

@@ -1,6 +1,6 @@
 import type { LinkField } from '@teable/sdk';
 import type { UseFormReturn } from 'react-hook-form';
-import type { ITableRelation } from '../../../types';
+import type { IFieldInfo, ITableRelation } from '../../../types';
 import type { FormValues } from '../schema';
 
 export interface ITableRelationConfigProps {
@@ -14,4 +14,6 @@ export interface ITableRelationConfigProps {
   availableFields: LinkField[];
   direction: 'input' | 'output';
   form: UseFormReturn<FormValues>;
+  isAuto?: boolean;
+  thisTableFields?: IFieldInfo[];
 }

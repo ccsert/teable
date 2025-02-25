@@ -30,6 +30,7 @@ export const InputRelations = React.memo<IInputRelationsProps>(
             <TableRelationConfig
               key={relation.tableId}
               baseId={baseId}
+              isAuto={false}
               table={{
                 ...relation,
                 displayFields: sharedDisplayFields[relation.tableId] || relation.displayFields,

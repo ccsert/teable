@@ -160,6 +160,7 @@ export const ConfigForm = ({ config, onConfigChange }: IConfigFormProps) => {
                 <FormLabel>{t('relationConfig')}</FormLabel>
                 <div className="space-y-4">
                   <OutputRelations
+                    thisTableFields={fields}
                     baseId={baseId!}
                     tableId={tableId!}
                     outputTableFields={outputTableFields}

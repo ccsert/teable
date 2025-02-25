@@ -8,6 +8,8 @@ import {
   AnchorContext,
   AppProvider,
   FieldProvider,
+  RecordProvider,
+  ShareViewContext,
   TableProvider,
   usePluginBridge,
   ViewProvider,
@@ -15,12 +17,13 @@ import {
 import { Spin } from '@teable/ui-lib';
 import { Button, Sheet, SheetContent, SheetTrigger } from '@teable/ui-lib/dist/shadcn';
 import { Settings2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEnv } from '../../../hooks/useEnv';
 import { useInitializationZodI18n } from '../../../hooks/useInitializationZodI18n';
 import type { IConfig } from '../types';
 import { ConfigForm } from './ConfigForm';
+import Graph from './graph';
 
 interface IPageProps {
   lang: string;
@@ -33,6 +36,7 @@ interface IPageProps {
 export const Pages = (props: IPageProps) => {
   const pluginBridge = usePluginBridge();
   const [uiConfig, setUIConfig] = useState<IUIConfig | undefined>();
+
   useInitializationZodI18n();
   useEffect(() => {
     if (!pluginBridge) {
@@ -58,6 +62,7 @@ const Container = (props: IPageProps & { uiConfig?: IUIConfig }) => {
   const { i18n, t } = useTranslation();
   const { tableId, positionId: viewId } = useEnv();
   const pluginBridge = usePluginBridge();
+  const { records, view, extra } = useContext(ShareViewContext);
 
   // 获取插件配置
   const { data: pluginInstall, isLoading } = useQuery({
@@ -104,14 +109,23 @@ const Container = (props: IPageProps & { uiConfig?: IUIConfig }) => {
 
   // 初始化配置
   useEffect(() => {
-    if (pluginInstall?.storage) {
-      const storageConfig = pluginInstall.storage as unknown as IConfig;
-      setConfig(storageConfig);
+    if (!pluginInstall) {
+      return;
+    }
 
-      // 如果没有配置过，打开设置面板
-      if (!storageConfig.isConfigured) {
-        setIsSettingsOpen(true);
-      }
+    if (!pluginInstall.storage) {
+      // 没有存储数据，需要配置
+      setIsSettingsOpen(true);
+      return;
+    }
+
+    // 有存储数据，读取配置
+    const storageConfig = pluginInstall.storage as unknown as IConfig;
+    setConfig(storageConfig);
+
+    // 如果配置未完成，打开设置面板
+    if (!storageConfig.isConfigured) {
+      setIsSettingsOpen(true);
     }
   }, [pluginInstall]);
 
@@ -152,6 +166,7 @@ const Container = (props: IPageProps & { uiConfig?: IUIConfig }) => {
       </div>
     );
   }
+
   return (
     <ThemeProvider attribute="class" forcedTheme={props.uiConfig?.theme}>
       <AppProvider
@@ -176,7 +191,9 @@ const Container = (props: IPageProps & { uiConfig?: IUIConfig }) => {
                         <p className="text-muted-foreground">{t('pleaseConfigureFirst')}</p>
                       </div>
                     ) : (
-                      <div className="size-full">测试</div>
+                      <RecordProvider serverRecords={records}>
+                        <Graph config={config} />
+                      </RecordProvider>
                     )}
                   </div>
 
