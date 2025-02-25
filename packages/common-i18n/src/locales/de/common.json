@@ -294,15 +294,18 @@
         "modelPreferences": "Modellpräferenzen",
         "modelPreferencesDescription": "Die Modellpräferenzen für den LLM-Anbieter",
         "embeddingModel": "Einbettungsmodell",
-        "embeddingModelDescription": "Das zu verwendende Einbettungsmodell",
+        "embeddingModelDescription": "Optional, normalerweise enthält die Modell-ID \"embedding\"",
         "translationModel": "Übersetzungsmodell",
         "translationModelDescription": "Das zu verwendende Übersetzungsmodell",
         "codingModel": "Kodierungsmodell",
-        "codingModelDescription": "Das zu verwendende Kodierungsmodell",
+        "codingModelDescription": "Wird für KI-Formelgenerierung und verwandte Funktionen verwendet",
         "configUpdated": "AI-Konfiguration aktualisiert",
         "noModelFound": "Kein Modell gefunden.",
         "searchModel": "Suche Modell...",
-        "selectModel": "Wähle Modell..."
+        "selectModel": "Wähle Modell...",
+        "input": "Eingabe",
+        "output": "Ausgabe",
+        "systemModelTips": "Das Input-Output-Verhältnis stellt den Wechselkurs zwischen Credits und Tokens dar. Beispielsweise bedeutet „1:1000“, dass 1 Credit ungefähr 1000 Tokens entspricht.<br></br>Hinweis: Bei jeder Nutzung wird mindestens 1 Credit abgezogen. Auch wenn der tatsächliche Verbrauch weniger als 1 Credit beträgt, wird er dennoch als 1 Credit abgerechnet."
       }
     }
   },

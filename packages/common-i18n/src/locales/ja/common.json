@@ -255,15 +255,18 @@
         "modelPreferences": "モデルの設定",
         "modelPreferencesDescription": "LLMプロバイダーのモデルの設定",
         "embeddingModel": "埋め込みモデル",
-        "embeddingModelDescription": "使用する埋め込みモデル",
+        "embeddingModelDescription": "オプション、通常モデルIDには\"embedding\"が含まれます",
         "translationModel": "翻訳モデル",
         "translationModelDescription": "使用する翻訳モデル",
         "codingModel": "コーディングモデル",
-        "codingModelDescription": "使用するコーディングモデル",
+        "codingModelDescription": "AI数式生成および関連機能に使用されます",
         "configUpdated": "AI設定が更新されました",
         "noModelFound": "モデルが見つかりません",
         "searchModel": "モデルを検索...",
-        "selectModel": "モデルを選択..."
+        "selectModel": "モデルを選択...",
+        "input": "入力",
+        "output": "出力",
+        "systemModelTips": "入力対出力比率は、クレジットとトークンの交換レートを表します。たとえば、「1:1000」は、1 クレジットが約 1000 トークンに等しいことを意味します。<br></br>注: 使用ごとに少なくとも 1 クレジットが差し引かれます。実際の消費量が 1 クレジット未満の場合でも、1 クレジットとして請求されます。"
       }
     }
   },
