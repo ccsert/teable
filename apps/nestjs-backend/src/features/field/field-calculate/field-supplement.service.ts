@@ -235,11 +235,21 @@ export class FieldSupplementService {
     const dbTableName = await this.getDbTableName(tableId);
     const foreignTableName = await this.getDbTableName(foreignTableId);
 
-    const symmetricFieldId = isOneWay
-      ? undefined
-      : oldOptions.foreignTableId === newOptionsRo.foreignTableId
-        ? oldOptions.symmetricFieldId
-        : generateFieldId();
+    const symmetricFieldId = (() => {
+      if (isOneWay) {
+        return undefined;
+      }
+
+      if (oldOptions.isOneWay) {
+        return generateFieldId();
+      }
+
+      if (oldOptions.foreignTableId === newOptionsRo.foreignTableId) {
+        return oldOptions.symmetricFieldId;
+      }
+
+      return generateFieldId();
+    })();
 
     const lookupFieldId =
       oldOptions.foreignTableId === foreignTableId
@@ -1150,28 +1160,38 @@ export class FieldSupplementService {
     } as IFieldVo) as LinkFieldDto;
   }
 
-  async createForeignKey(options: ILinkFieldOptions) {
-    const { relationship, fkHostTableName, selfKeyName, foreignKeyName, isOneWay } = options;
+  async createForeignKey(tableId: string, field: LinkFieldDto) {
+    const { relationship, fkHostTableName, selfKeyName, foreignKeyName, isOneWay, foreignTableId } =
+      field.options;
 
     let alterTableSchema: Knex.SchemaBuilder | undefined;
+    const tables = await this.prismaService.txClient().tableMeta.findMany({
+      where: { id: { in: [tableId, foreignTableId] } },
+      select: { id: true, dbTableName: true },
+    });
+
+    const dbTableName = tables.find((table) => table.id === tableId)!.dbTableName;
+    const foreignDbTableName = tables.find((table) => table.id === foreignTableId)!.dbTableName;
 
     if (relationship === Relationship.ManyMany) {
       alterTableSchema = this.knex.schema.createTable(fkHostTableName, (table) => {
         table.increments('__id').primary();
-        table.string(selfKeyName);
-        table.string(foreignKeyName);
-
-        table.index([foreignKeyName], `index_${foreignKeyName}`);
-        table.unique([selfKeyName, foreignKeyName], {
-          indexName: `index_${selfKeyName}_${foreignKeyName}`,
-        });
+        table
+          .string(selfKeyName)
+          .references('__id')
+          .inTable(dbTableName)
+          .withKeyName(`fk_${selfKeyName}`);
+        table
+          .string(foreignKeyName)
+          .references('__id')
+          .inTable(foreignDbTableName)
+          .withKeyName(`fk_${foreignKeyName}`);
       });
     }
 
     if (relationship === Relationship.ManyOne) {
       alterTableSchema = this.knex.schema.alterTable(fkHostTableName, (table) => {
-        table.string(foreignKeyName);
-        table.index([foreignKeyName], `index_${foreignKeyName}`);
+        table.string(foreignKeyName).references('__id').inTable(foreignDbTableName);
       });
     }
 
@@ -1179,18 +1199,15 @@ export class FieldSupplementService {
       if (isOneWay) {
         alterTableSchema = this.knex.schema.createTable(fkHostTableName, (table) => {
           table.increments('__id').primary();
-          table.string(selfKeyName);
-          table.string(foreignKeyName);
-
-          table.index([foreignKeyName], `index_${foreignKeyName}`);
+          table.string(selfKeyName).references('__id').inTable(dbTableName);
+          table.string(foreignKeyName).references('__id').inTable(foreignDbTableName);
           table.unique([selfKeyName, foreignKeyName], {
             indexName: `index_${selfKeyName}_${foreignKeyName}`,
           });
         });
       } else {
         alterTableSchema = this.knex.schema.alterTable(fkHostTableName, (table) => {
-          table.string(selfKeyName);
-          table.index([selfKeyName], `index_${selfKeyName}`);
+          table.string(selfKeyName).references('__id').inTable(dbTableName);
         });
       }
     }
@@ -1201,7 +1218,7 @@ export class FieldSupplementService {
         if (foreignKeyName === '__id') {
           throw new Error('can not use __id for foreignKeyName');
         }
-        table.string(foreignKeyName);
+        table.string(foreignKeyName).references('__id').inTable(foreignDbTableName);
         table.unique([foreignKeyName], {
           indexName: `index_${foreignKeyName}`,
         });
@@ -1213,6 +1230,10 @@ export class FieldSupplementService {
     }
 
     for (const sql of alterTableSchema.toSQL()) {
+      // skip sqlite pragma
+      if (sql.sql.startsWith('PRAGMA')) {
+        continue;
+      }
       await this.prismaService.txClient().$executeRawUnsafe(sql.sql);
     }
   }
@@ -1228,18 +1249,14 @@ export class FieldSupplementService {
     };
 
     const dropColumn = async (tableName: string, columnName: string) => {
-      const alterTableQuery = this.dbProvider.dropColumnAndIndex(
-        tableName,
-        columnName,
-        `index_${columnName}`
-      );
+      const sqls = this.dbProvider.dropColumnAndIndex(tableName, columnName, `index_${columnName}`);
 
-      for (const query of alterTableQuery) {
-        await this.prismaService.txClient().$executeRawUnsafe(query);
+      for (const sql of sqls) {
+        await this.prismaService.txClient().$executeRawUnsafe(sql);
       }
     };
 
-    if (relationship === Relationship.ManyMany) {
+    if (relationship === Relationship.ManyMany && fkHostTableName.includes('junction_')) {
       await dropTable(fkHostTableName);
     }
 
@@ -1249,7 +1266,7 @@ export class FieldSupplementService {
 
     if (relationship === Relationship.OneMany) {
       if (isOneWay) {
-        await dropTable(fkHostTableName);
+        fkHostTableName.includes('junction_') && (await dropTable(fkHostTableName));
       } else {
         await dropColumn(fkHostTableName, selfKeyName);
       }

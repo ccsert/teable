@@ -114,11 +114,11 @@ export class FieldConvertingLinkService {
       await this.fieldSupplementService.cleanForeignKey(oldField.options);
       await this.fieldDeletingService.cleanLookupRollupRef(tableId, newField.id);
 
-      await this.fieldSupplementService.createForeignKey(newField.options);
+      await this.fieldSupplementService.createForeignKey(tableId, newField);
       // change relationship, alter foreign key
     } else if (newField.options.relationship !== oldField.options.relationship) {
       await this.fieldSupplementService.cleanForeignKey(oldField.options);
-      await this.fieldSupplementService.createForeignKey(newField.options);
+      await this.fieldSupplementService.createForeignKey(tableId, newField);
     }
 
     // change one-way to two-way or two-way to one-way (symmetricFieldId add or delete, symmetricFieldId can not be change)
@@ -126,7 +126,7 @@ export class FieldConvertingLinkService {
   }
 
   private async otherToLink(tableId: string, newField: LinkFieldDto) {
-    await this.fieldSupplementService.createForeignKey(newField.options);
+    await this.fieldSupplementService.createForeignKey(tableId, newField);
     await this.fieldSupplementService.createReference(newField);
     if (newField.options.symmetricFieldId) {
       const symmetricField = await this.fieldSupplementService.generateSymmetricField(
@@ -253,7 +253,7 @@ export class FieldConvertingLinkService {
     Object.keys(foreignKeyMap).forEach((foreignId) => {
       const ids = foreignKeyMap[foreignId].map((item) => item.id);
       // relational behavior needs to be reversed
-      if (relationship === Relationship.ManyMany || relationship === Relationship.OneMany) {
+      if (relationship === Relationship.OneOne || relationship === Relationship.OneMany) {
         opsMap[foreignId] = [
           RecordOpBuilder.editor.setRecord.build({
             fieldId: symmetricFieldId as string,
@@ -263,7 +263,7 @@ export class FieldConvertingLinkService {
         ];
       }
 
-      if (relationship === Relationship.OneOne || relationship === Relationship.ManyOne) {
+      if (relationship === Relationship.ManyMany || relationship === Relationship.ManyOne) {
         opsMap[foreignId] = [
           RecordOpBuilder.editor.setRecord.build({
             fieldId: symmetricFieldId as string,

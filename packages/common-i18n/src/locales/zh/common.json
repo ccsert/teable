@@ -294,15 +294,18 @@
         "modelPreferences": "模型偏好",
         "modelPreferencesDescription": "模型提供商的模型偏好",
         "embeddingModel": "嵌入模型",
-        "embeddingModelDescription": "要使用的嵌入模型",
+        "embeddingModelDescription": "可选，通常模型 ID 包含 \"embedding\"",
         "translationModel": "翻译模型",
         "translationModelDescription": "要使用的翻译模型",
         "codingModel": "编码模型",
-        "codingModelDescription": "要使用的编码模型",
+        "codingModelDescription": "适用于 AI 生成公式等功能",
         "configUpdated": "AI 配置已更新",
         "noModelFound": "未找到模型",
         "searchModel": "搜索模型...",
-        "selectModel": "选择模型..."
+        "selectModel": "选择模型...",
+        "input": "输入",
+        "output": "输出",
+        "systemModelTips": "输入与输出中的比例代表算力与 Token 的兑换比率，例如 “1:1000” 表示 1 个算力约等于 1000 个Token。<br></br>注意：每次使用至少扣除 1 个算力，即使实际消耗不足 1 个算力，也按 1 个算力进行计算。"
       }
     }
   },
