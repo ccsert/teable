@@ -715,6 +715,7 @@ export const InteractionLayerBase: ForwardRefRenderFunction<
         height,
         cursor,
       }}
+      className="absolute"
     >
       <div
         ref={stageRef}
