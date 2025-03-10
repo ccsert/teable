@@ -11,6 +11,7 @@ import { useTranslation } from 'next-i18next';
 const languages = [
   { key: 'zh', title: '中文' },
   { key: 'en', title: 'English' },
+  { key: 'it', title: 'Italiano' },
   { key: 'fr', title: 'Français' },
   { key: 'de', title: 'Deutsch' },
   { key: 'ja', title: '日本語' },
