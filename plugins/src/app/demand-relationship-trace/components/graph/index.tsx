@@ -1,3 +1,4 @@
+'use client';
 import G6 from '@antv/g6';
 import type { Graph as G6Graph } from '@antv/g6';
 import { FieldKeyType } from '@teable/core';
@@ -5,6 +6,7 @@ import type { RecordCore } from '@teable/core';
 import { getRecords } from '@teable/openapi';
 import { useFields, useRecords } from '@teable/sdk';
 import { useSize } from 'ahooks';
+import { insertCss } from 'insert-css';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { IConfig, IFieldInfo, ITableRelation } from '../../types';
 
@@ -47,9 +49,6 @@ const buildNodeIdByRecordLabel = (record: RecordCore, fieldsMap: Map<string, str
       ([_, value]) => typeof value !== 'object' && !Array.isArray(value)
     )
   );
-  console.log(fieldsMap);
-
-  console.log(fields);
   return Object.entries(fields)
     .map(([key, value]) => `${fieldsMap.get(key)}: ${value}`)
     .join('\n');
@@ -68,6 +67,25 @@ const buildNodeByRecordLabel = (record: IRecordVo) => {
 };
 
 const Graph: React.FC<IGraphProps> = ({ config }) => {
+  // 更新小地图样式
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const css = `
+        .g6-minimap-container {
+          border: 1px solid #e2e2e2;
+          position: absolute !important;
+          right: 16px !important;
+          bottom: 16px !important;
+          left: auto !important;
+          top: auto !important;
+        }
+        .g6-minimap-viewport {
+          border: 2px solid rgb(25, 128, 255);
+        }
+      `;
+      insertCss(css);
+    }
+  }, []);
   // 获取输出关系的字段
   const outputRelationFields = useMemo(() => {
     return config.relations
@@ -141,98 +159,85 @@ const Graph: React.FC<IGraphProps> = ({ config }) => {
     loadRecords();
   }, [tables]);
   // 简化 buildGraphData 函数
-  const buildGraphData = (records: RecordCore[], recordMap: Map<string, IRecordVo[]>) => {
-    const allNodes: INode[] = [];
-    const allEdges: IEdge[] = [];
-    // 遍历所有记录，处理输出关系
-    records.forEach((record) => {
-      // 添加当前记录节点,此处的字段一般是id作为标识
-      const displayFields = buildNodeIdByRecordLabel(record, fieldsMap);
-      console.log(displayFields);
+  const buildGraphData = useMemo(
+    () => (records: RecordCore[], recordMap: Map<string, IRecordVo[]>) => {
+      const allNodes: INode[] = [];
+      const allEdges: IEdge[] = [];
 
-      allNodes.push({
-        id: record.id,
-        label: displayFields,
-        tableId: config.relations[0].tableId,
-        style: { fill: '#e6f7ff' },
-      });
-      // 处理输出关系
-      outputRelationFields.forEach((fieldId) => {
-        const field = fieldsMap.get(fieldId);
-        if (!field) return;
-
-        const linkedRecords = record.fields[fieldId] as { id: string; title: string }[];
-        if (!linkedRecords || !Array.isArray(linkedRecords)) return;
-
-        linkedRecords.forEach((linkedRecord) => {
-          allEdges.push({
-            source: record.id,
-            target: linkedRecord.id,
-            label: field,
-          });
-        });
-      });
-      allNodes.push({
-        id: record.id,
-        label: displayFields,
-        tableId: config.relations[0].tableId,
-        style: { fill: '#e6f7ff' },
-      });
-    });
-    // 遍历所有关联表，处理输入记录
-    recordMap.forEach((records, tableId) => {
+      // 遍历所有记录，处理输出关系
       records.forEach((record) => {
+        const displayFields = buildNodeIdByRecordLabel(record, fieldsMap);
+
+        // 只添加一次节点
         allNodes.push({
           id: record.id,
-          label: buildNodeByRecordLabel(record),
-          tableId,
-          style: { fill: '#f0f5ff' },
+          label: displayFields,
+          tableId: config.relations[0].tableId,
+          style: { fill: '#e6f7ff' },
         });
-        // 处理输入关系
-        inputRelationFields.forEach((relation) => {
-          if (relation.tableId !== tableId) return;
-          if (!relation.fieldName) return;
-          const field = record.fields[relation.fieldName];
+
+        // 处理输出关系
+        outputRelationFields.forEach((fieldId) => {
+          const field = fieldsMap.get(fieldId);
           if (!field) return;
 
-          const linkedRecords = field as {
-            id: string;
-            title: string;
-          }[];
-
+          const linkedRecords = record.fields[fieldId] as { id: string; title: string }[];
           if (!linkedRecords || !Array.isArray(linkedRecords)) return;
 
           linkedRecords.forEach((linkedRecord) => {
             allEdges.push({
               source: record.id,
               target: linkedRecord.id,
-              label: relation.fieldName!,
+              label: field,
             });
           });
         });
       });
-    });
+      // 遍历所有关联表，处理输入记录
+      recordMap.forEach((records, tableId) => {
+        records.forEach((record) => {
+          allNodes.push({
+            id: record.id,
+            label: buildNodeByRecordLabel(record),
+            tableId,
+            style: { fill: '#f0f5ff' },
+          });
+          // 处理输入关系
+          inputRelationFields.forEach((relation) => {
+            if (relation.tableId !== tableId) return;
+            if (!relation.fieldName) return;
+            const field = record.fields[relation.fieldName];
+            if (!field) return;
 
-    return {
-      nodes: Array.from(new Map(allNodes.map((node) => [node.id, node])).values()),
-      edges: allEdges,
-    };
-  };
+            const linkedRecords = field as {
+              id: string;
+              title: string;
+            }[];
 
+            if (!linkedRecords || !Array.isArray(linkedRecords)) return;
+
+            linkedRecords.forEach((linkedRecord) => {
+              allEdges.push({
+                source: record.id,
+                target: linkedRecord.id,
+                label: relation.fieldName!,
+              });
+            });
+          });
+        });
+      });
+
+      return {
+        nodes: Array.from(new Map(allNodes.map((node) => [node.id, node])).values()),
+        edges: allEdges,
+        id: 'root',
+      };
+    },
+    [config, fieldsMap, inputRelationFields, outputRelationFields]
+  );
   // 初始化图实例
   useEffect(() => {
     if (!containerRef.current || !size) return;
-
-    // 注册 minimap 插件
-    const minimap = new G6.Minimap({
-      size: [150, 100],
-      className: 'minimap',
-      type: 'delegate',
-      delegateStyle: {
-        fill: '#fff',
-        stroke: '#91d5ff',
-      },
-    });
 
     graphRef.current = new G6.Graph({
       container: containerRef.current,
@@ -244,8 +249,8 @@ const Graph: React.FC<IGraphProps> = ({ config }) => {
       layout: {
         type: 'dagre',
         rankdir: 'LR',
-        nodesep: 50,
-        ranksep: 70,
+        nodesep: 25,
+        ranksep: 40,
         preventOverlap: true,
       },
       defaultNode: {
@@ -258,12 +263,6 @@ const Graph: React.FC<IGraphProps> = ({ config }) => {
           lineWidth: 2,
           cursor: 'pointer',
         },
-        labelCfg: {
-          style: {
-            fontSize: 12,
-            fill: '#333',
-          },
-        },
       },
       defaultEdge: {
         type: 'polyline',
@@ -274,19 +273,12 @@ const Graph: React.FC<IGraphProps> = ({ config }) => {
           lineWidth: 2,
           stroke: '#91d5ff',
         },
-        labelCfg: {
-          style: {
-            fontSize: 12,
-            fill: '#666',
-            background: {
-              fill: '#fff',
-              padding: [4, 8],
-              radius: 4,
-            },
-          },
-        },
       },
-      plugins: [minimap],
+      plugins: [
+        new G6.Minimap({
+          size: [150, 100],
+        }),
+      ],
       // 添加缩放限制
       minZoom: 0.2,
       maxZoom: 5,
@@ -296,6 +288,8 @@ const Graph: React.FC<IGraphProps> = ({ config }) => {
         duration: 500,
         easing: 'easeCubic',
       },
+      fitView: true,
+      fitViewPadding: [20, 20, 20, 20],
     });
 
     return () => {
@@ -305,32 +299,21 @@ const Graph: React.FC<IGraphProps> = ({ config }) => {
     };
   }, [size]);
 
-  // 更新图数据
+  // 更新渲染逻辑
   useEffect(() => {
     if (!graphRef.current || !records.length) return;
-
     const graphData = buildGraphData(records, recordMap);
-    console.log(graphData);
-
-    graphRef.current.changeData(graphData);
-    graphRef.current.fitView();
-  }, [records, recordMap, config]);
+    if (graphData) {
+      graphRef.current.clear(); // 清除之前的内容
+      graphRef.current.data(graphData);
+      graphRef.current.render();
+      graphRef.current.fitView();
+    }
+  }, [records, recordMap, buildGraphData]);
 
   return (
-    <div className="relative size-full">
+    <div className="relative h-[calc(100vh-120px)] w-full overflow-hidden">
       <div ref={containerRef} className="size-full" />
-      {/* 小地图的样式 */}
-      <style jsx>{`
-        :global(.minimap) {
-          position: absolute;
-          bottom: 16px;
-          right: 16px;
-          border: 1px solid #e5e7eb;
-          border-radius: 4px;
-          background-color: #fff;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-      `}</style>
     </div>
   );
 };
