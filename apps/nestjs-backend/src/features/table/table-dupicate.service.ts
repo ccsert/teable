@@ -158,11 +158,25 @@ export class TableDuplicateService {
       await this.createFkField(targetDbTableName, name.slice(5));
     }
 
+    // following field should not be duplicated
+    const systemColumns = [
+      '__auto_number',
+      '__created_time',
+      '__last_modified_time',
+      '__last_modified_by',
+    ];
+
     // use new table field columns info
     // old table contains ghost columns or customer columns
-    const oldColumns = newFieldColumns.concat(oldRowColumns).concat(oldFkColumns);
+    const oldColumns = newFieldColumns
+      .concat(oldRowColumns)
+      .concat(oldFkColumns)
+      .filter((dbFieldName) => !systemColumns.includes(dbFieldName));
 
-    const newColumns = newFieldColumns.concat(newRowColumns).concat(newFkColumns);
+    const newColumns = newFieldColumns
+      .concat(newRowColumns)
+      .concat(newFkColumns)
+      .filter((dbFieldName) => !systemColumns.includes(dbFieldName));
 
     const sql = this.dbProvider
       .duplicateTableQuery(qb)
@@ -451,6 +465,8 @@ export class TableDuplicateService {
             'filter',
             'visibleFieldIds',
           ]),
+          // duplicate link field always be one-way, consider that advanced auth control etc.
+          isOneWay: true,
         },
       });
       await this.replenishmentConstraint(newField.id, targetTableId, {
