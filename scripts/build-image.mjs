@@ -18,6 +18,7 @@
  * The generated version number is ultimately written to the .env file in the specified Next.js project directory, as the environment variable NEXT_PUBLIC_BUILD_VERSION.
  */
 
+$.verbose = false; // 减少输出详细信息
 const env = $.env;
 let isCi = ['true', '1'].includes(env?.CI ?? '');
 
@@ -34,7 +35,7 @@ const getSemver = async () => {
     const refType = env.GITHUB_REF_TYPE;
     const runNumber = env.GITHUB_RUN_NUMBER;
     const isPR = Boolean(env.GITHUB_HEAD_REF);
-    
+
     console.log('isPR:', isPR);
     console.log('refType: ', refType);
     console.log('runNumber: ', runNumber);
@@ -77,6 +78,29 @@ const asyncForEach = async (array, callback) => {
   }
 };
 
+// 添加重试逻辑函数
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const retryCommand = async (cmd, maxRetries = 3, delay = 5000) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`执行命令 (尝试 ${attempt}/${maxRetries})...`);
+      const result = await cmd;
+      console.log('命令执行成功');
+      return result;
+    } catch (error) {
+      console.error(`尝试 ${attempt} 失败: ${error.message}`);
+      if (attempt === maxRetries) {
+        console.error('达到最大重试次数，失败');
+        throw error;
+      }
+      console.log(`将在 ${delay / 1000} 秒后重试...`);
+      await sleep(delay);
+      // 增加重试延迟时间
+      delay = delay * 1.5;
+    }
+  }
+};
+
 const {
   file = 'Dockerfile',
   'build-arg': buildArg,
@@ -92,9 +116,19 @@ const buildArgs = toArray(buildArg);
 const cacheFrom = toArray(cacheFromArg);
 const cacheTo = toArray(cacheToArg);
 const tags = toArray(tag, false, true);
-const platform = platformArg ?? '';
+// 默认指定平台为 linux/amd64
+const platform = platformArg ?? 'linux/amd64';
 const push = toBoolean(pushArg);
 const remotes = Array.from(new Set(tags.map((tag) => tag.split(':')[0])));
+
+// 预先拉取基础镜像
+console.log('预先拉取基础镜像以避免构建时网络问题...');
+try {
+  await retryCommand($`docker pull node:20.9.0-bookworm-slim`);
+  await retryCommand($`docker pull node:20.9.0-bookworm`);
+} catch (error) {
+  console.warn('预拉取基础镜像失败，将继续尝试构建:', error.message);
+}
 
 const command = ['docker', 'build'];
 
@@ -119,7 +153,7 @@ if (platform) {
   command.push('--platform', platform);
 }
 
-const arch = platform.split('/')[1];
+const arch = platform.split('/')[1] || 'amd64'; // 默认amd64
 
 remotes.forEach((remote) => {
   command.push('--tag', `${remote}:${dockerSemver}-${arch}`);
@@ -136,4 +170,10 @@ if (push) {
 command.push('.');
 
 console.log('command: ', command.join(' '));
-await $`${command}`;
+try {
+  await retryCommand($`${command}`);
+  console.log('构建成功完成');
+} catch (error) {
+  console.error('构建失败:', error.message);
+  process.exit(1);
+}

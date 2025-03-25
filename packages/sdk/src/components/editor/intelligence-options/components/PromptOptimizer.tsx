@@ -18,7 +18,7 @@ const PureEditor = (props: {
 }) => (
   <CodeMirrorEditor
     {...props}
-    className="h-[360px] overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm"
+    className="h-[360px] overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900"
     isFullscreen={true}
     enableFieldSelector={false}
     disablePromptOptimizer={true}
@@ -37,7 +37,7 @@ const EditorWithFields = (props: {
   <div className="relative">
     <CodeMirrorEditor
       {...props}
-      className="h-[360px] overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm"
+      className="h-[360px] overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900"
       isFullscreen={true}
       enableFieldSelector={false}
       disablePromptOptimizer={true}
@@ -82,7 +82,7 @@ export const PromptOptimizer = ({
       <Button
         variant="ghost"
         size="icon"
-        className="size-7 rounded-md border border-gray-100 bg-white/80 p-1.5 text-gray-600 shadow-sm backdrop-blur-sm hover:bg-gray-50 hover:text-gray-900 hover:shadow-md"
+        className="size-7 rounded-md border border-gray-100 bg-white/80 p-1.5 text-gray-600 shadow-sm backdrop-blur-sm hover:bg-gray-50 hover:text-gray-900 hover:shadow-md dark:border-gray-700 dark:bg-gray-900/80 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
         onClick={() => setOpen(true)}
       >
         <MagicAI className="size-full" active={true} />
@@ -97,7 +97,9 @@ export const PromptOptimizer = ({
           <div className="grid grid-cols-2 gap-6 p-6">
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-gray-700">描述你想要的提示词效果</div>
+                <div className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  描述你想要的提示词效果
+                </div>
                 <Button
                   size="sm"
                   onClick={handleOptimize}
@@ -119,7 +121,9 @@ export const PromptOptimizer = ({
 
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-gray-700">优化后的提示词</div>
+                <div className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  优化后的提示词
+                </div>
                 <Button
                   size="sm"
                   variant="default"

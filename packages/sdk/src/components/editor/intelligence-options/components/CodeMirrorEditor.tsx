@@ -3,6 +3,7 @@ import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 import { EditorState, StateField, StateEffect } from '@codemirror/state';
 import type { DecorationSet } from '@codemirror/view';
 import { EditorView, keymap, Decoration, WidgetType } from '@codemirror/view';
+import { useTheme } from '@teable/next-themes';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@teable/ui-lib';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorExtensions } from './EditorExtensions';
@@ -30,7 +31,7 @@ class FieldWidget extends WidgetType {
   toDOM() {
     const wrapper = document.createElement('span');
     wrapper.className =
-      'inline-flex h-5 items-center gap-0.5 rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-700 cursor-default select-none hover:bg-blue-100 relative';
+      'inline-flex h-5 items-center gap-0.5 rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-700 cursor-default select-none hover:bg-blue-100 relative dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800';
     wrapper.setAttribute('data-field-id', this.fieldId);
     wrapper.setAttribute('data-field-range', `${this.from},${this.to}`);
     wrapper.style.verticalAlign = 'middle';
@@ -43,7 +44,7 @@ class FieldWidget extends WidgetType {
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
     deleteButton.className =
-      'inline-flex items-center justify-center size-3 hover:bg-blue-200 rounded-sm transition-colors';
+      'inline-flex items-center justify-center size-3 hover:bg-blue-200 rounded-sm transition-colors dark:hover:bg-blue-700';
     deleteButton.innerHTML = `
       <svg class="size-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
         <path d="M18 6L6 18M6 6l12 12"/>
@@ -99,6 +100,8 @@ const PureEditor = ({
   const internalEditorViewRef = useRef<EditorView | null>(null);
   const [editorView, setEditorView] = useState<EditorView | null>(null);
   const lastValueRef = useRef(value);
+  const { resolvedTheme } = useTheme();
+  const isDarkMode = resolvedTheme === 'dark';
 
   // 使用传入的 ref 或内部 ref
   const actualEditorViewRef = editorViewRef || internalEditorViewRef;
@@ -201,6 +204,52 @@ const PureEditor = ({
 
   const createEditorView = useCallback(
     (parent: HTMLElement) => {
+      const EDITOR_THEME_BASE = {
+        '&': {
+          minHeight: '56px',
+          maxHeight,
+          fontSize: '14px',
+        },
+        '.cm-scroller': { overflow: 'auto' },
+        '&.cm-focused': {
+          outline: '2px solid rgb(var(--color-primary) / 0.2)',
+        },
+        '.cm-line': { padding: '3px 0', lineHeight: '1.6' },
+      };
+
+      const EDITOR_LIGHT_THEME = {
+        ...EDITOR_THEME_BASE,
+        '&': {
+          ...EDITOR_THEME_BASE['&'],
+          backgroundColor: 'white',
+          borderRadius: '0.5rem',
+        },
+        '.cm-content': {
+          fontFamily: 'monospace',
+          padding: '12px 16px',
+          minHeight: height,
+          height: '100%',
+          caretColor: 'black',
+        },
+      };
+
+      const EDITOR_DARK_THEME = {
+        ...EDITOR_THEME_BASE,
+        '&': {
+          ...EDITOR_THEME_BASE['&'],
+          backgroundColor: 'hsl(var(--background))',
+          borderRadius: '0.5rem',
+        },
+        '.cm-content': {
+          fontFamily: 'monospace',
+          padding: '12px 16px',
+          minHeight: height,
+          height: '100%',
+          caretColor: 'hsl(var(--foreground))',
+          color: 'hsl(var(--foreground))',
+        },
+      };
+
       const extensions = [
         history(),
         keymap.of([
@@ -286,36 +335,7 @@ const PureEditor = ({
             decorateFields(update.view);
           }
         }),
-        EditorView.theme({
-          '&': {
-            height,
-            fontSize: '14px',
-            maxHeight,
-          },
-          '.cm-content': {
-            fontFamily: 'monospace',
-            padding: '12px 16px',
-            minHeight: height,
-            height: '100%',
-            caretColor: 'black',
-          },
-          '.cm-scroller': {
-            overflow: 'auto',
-            lineHeight: '1.6',
-            maxHeight,
-          },
-          '&.cm-focused': {
-            outline: '2px solid rgb(var(--color-primary) / 0.2)',
-            outlineOffset: '-1px',
-          },
-          '.cm-line': {
-            padding: '3px 0',
-          },
-          '&.cm-editor': {
-            backgroundColor: 'white',
-            borderRadius: '0.5rem',
-          },
-        }),
+        EditorView.theme(isDarkMode ? EDITOR_DARK_THEME : EDITOR_LIGHT_THEME),
         EditorView.lineWrapping,
         EditorState.allowMultipleSelections.of(true),
         placeholder ? EditorView.contentAttributes.of({ 'data-placeholder': placeholder }) : [],
@@ -344,6 +364,7 @@ const PureEditor = ({
       fieldDecorationsState,
       findFieldAtPos,
       handleFieldDelete,
+      isDarkMode,
     ]
   );
 
@@ -359,7 +380,7 @@ const PureEditor = ({
     return () => {
       view.destroy();
     };
-  }, []); // 只在组件挂载时初始化一次
+  }, [createEditorView]); // 添加依赖项，当主题变化时重新创建编辑器
 
   // 修改外部值更新处理
   useEffect(() => {
@@ -399,34 +420,49 @@ const PureEditor = ({
             text-overflow: ellipsis;
             white-space: nowrap;
           }
+          
+          .dark .cm-editor [data-placeholder]:empty::before {
+            color: #777;
+          }
+          
           .cm-editor {
             height: 100%;
           }
+          
           .cm-editor.cm-focused {
             outline: 2px solid rgb(var(--color-primary) / 0.2);
             outline-offset: -1px;
           }
+          
           .cm-cursor {
             border-left: 1.2px solid black;
             border-right: none;
             width: 0;
           }
+          
+          .dark .cm-cursor {
+            border-left-color: white;
+          }
+          
           .cm-content {
             line-height: 1.6;
             padding-top: 12px !important;
           }
+          
           .cm-line {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
             min-height: 1.6em;
           }
+          
           .cm-field-mark {
             background: transparent;
             cursor: default;
             display: inline-flex;
             align-items: center;
           }
+          
           .cm-line {
             display: flex;
             flex-wrap: wrap;
@@ -437,7 +473,7 @@ const PureEditor = ({
       </style>
       <div
         ref={editorRef}
-        className="h-full cursor-text rounded-lg border border-gray-200 shadow-sm focus-within:border-primary hover:border-gray-400"
+        className="h-full cursor-text rounded-lg border border-gray-200 shadow-sm focus-within:border-primary hover:border-gray-400 dark:border-gray-700 dark:hover:border-gray-500 dark:focus-within:border-primary"
       />
     </div>
   );
@@ -478,14 +514,16 @@ export const CodeMirrorEditor = (
   return (
     <>
       <div
-        className={`group flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm focus-within:border-primary hover:border-gray-400 ${
+        className={`group flex flex-col overflow-hidden rounded-lg border border-gray-200 shadow-sm focus-within:border-primary hover:border-gray-400 dark:border-gray-700 dark:hover:border-gray-500 dark:focus-within:border-primary ${
           props.className || ''
         }`}
       >
         {props.label && (
-          <div className="flex h-9 items-center justify-between border-b border-gray-100 bg-gray-50/50 px-3">
+          <div className="flex h-9 items-center justify-between border-b border-gray-100 bg-gray-50/50 px-3 dark:border-gray-700 dark:bg-gray-800/50">
             <div className="flex items-center">
-              <div className="text-sm font-medium text-gray-700">{props.label}</div>
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                {props.label}
+              </div>
             </div>
             <EditorExtensions
               {...props}

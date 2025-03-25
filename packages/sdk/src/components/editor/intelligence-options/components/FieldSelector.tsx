@@ -37,7 +37,7 @@ export const FieldSelector = ({ currentFieldId, onSelect }: IFieldSelectorProps)
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56 p-0">
-        <div className="border-b p-2">
+        <div className="border-b p-2 dark:border-gray-700">
           <Input
             placeholder="搜索字段..."
             value={search}

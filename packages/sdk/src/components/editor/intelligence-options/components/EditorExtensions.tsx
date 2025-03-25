@@ -56,7 +56,7 @@ const FullscreenExtension = ({ onClick }: { onClick: () => void }) => (
   <Button
     variant="ghost"
     size="icon"
-    className="size-7 rounded-md border border-gray-100 bg-white/80 p-1.5 text-gray-600 shadow-sm backdrop-blur-sm hover:bg-gray-50 hover:text-gray-900 hover:shadow-md"
+    className="size-7 rounded-md border border-gray-100 bg-white/80 p-1.5 text-gray-600 shadow-sm backdrop-blur-sm hover:bg-gray-50 hover:text-gray-900 hover:shadow-md dark:border-gray-700 dark:bg-gray-900/80 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
     onClick={onClick}
   >
     <Maximize2 className="size-full" />
@@ -68,7 +68,7 @@ const MoreButton = ({ onClick }: { onClick: () => void }) => (
   <Button
     variant="ghost"
     size="icon"
-    className="size-7 rounded-md border border-gray-100 bg-white/80 p-1.5 text-gray-600 shadow-sm backdrop-blur-sm hover:bg-gray-50 hover:text-gray-900 hover:shadow-md"
+    className="size-7 rounded-md border border-gray-100 bg-white/80 p-1.5 text-gray-600 shadow-sm backdrop-blur-sm hover:bg-gray-50 hover:text-gray-900 hover:shadow-md dark:border-gray-700 dark:bg-gray-900/80 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
     onClick={onClick}
   >
     <MoreHorizontal className="size-full" />
@@ -149,7 +149,7 @@ export const EditorExtensions = ({
         <div className="relative">
           <MoreButton onClick={() => setShowMore(!showMore)} />
           {showMore && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-max rounded-lg border bg-white p-1 shadow-lg">
+            <div className="absolute right-0 top-full z-50 mt-1 w-max rounded-lg border bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
               {hiddenExtensions.map((extension) => (
                 <div key={extension.id} className="px-1 py-0.5">
                   {extension.component}

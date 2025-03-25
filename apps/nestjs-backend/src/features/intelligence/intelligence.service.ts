@@ -47,7 +47,7 @@ export class IntelligenceService {
   private processingLocks = new Map<string, boolean>();
   private cancelTokens = new Map<string, AbortController>();
   private readonly maxRetries = 3;
-  private readonly smallBatchSize = 2;
+  private readonly smallBatchSize = 10;
   private readonly batchDelay = 500;
   private readonly taskCancelledMessage = 'Task cancelled';
   private readonly thinkingMessage = '思考中...';

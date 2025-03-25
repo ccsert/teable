@@ -47,6 +47,9 @@ SQLITE_PRISMA_DATABASE_URL ?= file:../../db/main.db
 # set param statement_cache_size=1 to avoid query error `ERROR: cached plan must not change result type` after alter column type (modify field type)
 POSTGES_PRISMA_DATABASE_URL ?= postgresql://teable:teable\@127.0.0.1:5432/teable?schema=public\&statement_cache_size=1
 
+# 默认平台参数
+BUILD_PLATFORM ?= linux/amd64
+
 # If the first make argument is "start", "stop"...
 ifeq (docker.start,$(firstword $(MAKECMDGOALS)))
     SERVICE_TARGET = true
@@ -191,13 +194,30 @@ docker.images:
 build.app:
 	@zx --version || pnpm add -g zx; \
   	zx scripts/build-image.mjs --file=dockers/teable/Dockerfile \
-		  --tag=teable:develop
+		  --tag=teable:develop \
+		  --platform=$(BUILD_PLATFORM)
 
 build.db-migrate:
 	@zx --version || pnpm add -g zx; \
   	zx scripts/build-image.mjs --file=dockers/teable/Dockerfile.db-migrate \
-		  --tag=teable-db-migrate:develop
+		  --tag=teable-db-migrate:develop \
+		  --platform=$(BUILD_PLATFORM)
 
+# 添加新的目标，用于构建特定平台的镜像
+build.app.amd64:
+	@make build.app BUILD_PLATFORM=linux/amd64
+
+build.db-migrate.amd64:
+	@make build.db-migrate BUILD_PLATFORM=linux/amd64
+
+build.app.arm64:
+	@make build.app BUILD_PLATFORM=linux/arm64
+
+build.db-migrate.arm64:
+	@make build.db-migrate BUILD_PLATFORM=linux/arm64
+
+# 添加一个构建所有组件的目标
+build.all.amd64: build.app.amd64 build.db-migrate.amd64
 
 sqlite.integration.test:
 	@export PRISMA_DATABASE_URL='file:../../db/main.db'; \
