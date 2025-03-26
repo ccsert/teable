@@ -1,13 +1,15 @@
-import type { ILongTextFieldOptions } from '@teable/core';
+import type { IIntelligenceOptions, ILongTextFieldOptions } from '@teable/core';
 import { Textarea } from '@teable/ui-lib/shadcn';
 import { DefaultValue } from '../DefaultValue';
+import { LongTextIntelligenceOptions } from '../intelligence-options';
 
 export const LongTextOptions = (props: {
+  fieldId?: string;
   options: Partial<ILongTextFieldOptions> | undefined;
   onChange?: (options: Partial<ILongTextFieldOptions>) => void;
   isLookup?: boolean;
 }) => {
-  const { isLookup, options, onChange } = props;
+  const { fieldId, isLookup, options, onChange } = props;
 
   const onDefaultValueChange = (defaultValue: string | undefined) => {
     onChange?.({
@@ -15,8 +17,19 @@ export const LongTextOptions = (props: {
     });
   };
 
+  const onIntelligenceChange = (intelligence: IIntelligenceOptions) => {
+    onChange?.({
+      intelligence,
+    });
+  };
+
   return (
     <div className="form-control space-y-2">
+      <LongTextIntelligenceOptions
+        fieldId={fieldId}
+        options={options?.intelligence}
+        onChange={onIntelligenceChange}
+      />
       {!isLookup && (
         <DefaultValue onReset={() => onDefaultValueChange(undefined)}>
           <Textarea

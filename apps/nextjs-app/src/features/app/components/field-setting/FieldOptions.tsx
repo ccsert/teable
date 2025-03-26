@@ -52,6 +52,7 @@ export const FieldOptions: React.FC<IFieldOptionsProps> = ({ field, onChange }) 
           options={options as ILongTextFieldOptions}
           isLookup={isLookup}
           onChange={onChange}
+          fieldId={id}
         />
       );
     case FieldType.SingleSelect:

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { CellValueType, FieldType } from '../constant';
 import { FieldCore } from '../field';
+import { intelligenceOptionsSchema } from '../intelligence-options';
 
 export const longTextFieldOptionsSchema = z
   .object({
@@ -8,6 +9,7 @@ export const longTextFieldOptionsSchema = z
       .string()
       .optional()
       .transform((value) => (typeof value === 'string' ? value.trim() : value)),
+    intelligence: intelligenceOptionsSchema.optional(),
   })
   .strict();
 
